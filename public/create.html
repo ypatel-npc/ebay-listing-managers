@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create eBay Listing</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container mt-4">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 rounded">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">eBay Listing Manager</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="/listings.html">My Listings</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link active" href="/create.html">Create Listing</a>
+            </li>
+          </ul>
+          <span class="navbar-text text-white me-3">
+            <i class="bi bi-person-circle"></i> <span id="user-id"></span>
+          </span>
+          <button id="logout-btn" class="btn btn-outline-light">Logout</button>
+        </div>
+      </div>
+    </nav>
+    
+    <div class="card mb-4">
+      <div class="card-header bg-primary text-white">
+        <h3>Create New eBay Listing</h3>
+      </div>
+      <div class="card-body">
+        <form id="listing-form">
+          <!-- Basic Information -->
+          <div class="form-section">
+            <h4>Basic Information</h4>
+            <div class="mb-3">
+              <label for="title" class="form-label">Title*</label>
+              <input type="text" class="form-control" id="title" required maxlength="80">
+              <div class="form-text">Maximum 80 characters</div>
+            </div>
+            
+            <div class="mb-3">
+              <label for="description" class="form-label">Description*</label>
+              <textarea class="form-control" id="description" rows="5" required></textarea>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="category-search" class="form-label">Search for Category</label>
+                <div class="input-group">
+                  <input type="text" class="form-control" id="category-search" placeholder="e.g., computer, phone">
+                  <button class="btn btn-outline-secondary" type="button" id="search-category-btn">Search</button>
+                </div>
+              </div>
+              
+              <div class="col-md-6 mb-3">
+                <label for="category" class="form-label">Category*</label>
+                <select class="form-control" id="category" required>
+                  <option value="">Select a category</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Pricing and Inventory -->
+          <div class="form-section">
+            <h4>Pricing and Inventory</h4>
+            <div class="row">
+              <div class="col-md-4 mb-3">
+                <label for="price" class="form-label">Price*</label>
+                <div class="input-group">
+                  <span class="input-group-text">$</span>
+                  <input type="number" class="form-control" id="price" step="0.01" min="0.01" required>
+                </div>
+              </div>
+              
+              <div class="col-md-4 mb-3">
+                <label for="condition" class="form-label">Condition*</label>
+                <select class="form-control" id="condition" required>
+                  <option value="">Select condition</option>
+                  <option value="1000">New</option>
+                  <option value="1500">New other (see details)</option>
+                  <option value="1750">New with defects</option>
+                  <option value="2000">Certified refurbished</option>
+                  <option value="2500">Seller refurbished</option>
+                  <option value="3000">Used</option>
+                  <option value="4000">Very Good</option>
+                  <option value="5000">Good</option>
+                  <option value="6000">Acceptable</option>
+                  <option value="7000">For parts or not working</option>
+                </select>
+              </div>
+              
+              <div class="col-md-4 mb-3">
+                <label for="quantity" class="form-label">Quantity*</label>
+                <input type="number" class="form-control" id="quantity" min="1" value="1" required>
+              </div>
+            </div>
+            
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="out-of-stock-control">
+              <label class="form-check-label" for="out-of-stock-control">
+                Enable out of stock control
+              </label>
+              <div class="form-text">When enabled, your listing will remain visible but show as "out of stock" when quantity reaches zero.</div>
+            </div>
+          </div>
+          
+          <!-- Item Specifics -->
+          <div class="form-section">
+            <h4>Item Specifics</h4>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="brand" class="form-label">Brand*</label>
+                <input type="text" class="form-control" id="brand" required>
+              </div>
+              
+              <div class="col-md-6 mb-3">
+                <label for="mpn" class="form-label">MPN (Manufacturer Part Number)</label>
+                <input type="text" class="form-control" id="mpn">
+              </div>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="model" class="form-label">Model*</label>
+                <input type="text" class="form-control" id="model" required>
+              </div>
+              
+              <div class="col-md-6 mb-3">
+                <label for="color" class="form-label">Color*</label>
+                <input type="text" class="form-control" id="color" required>
+              </div>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="storage-capacity" class="form-label">Storage Capacity*</label>
+                <input type="text" class="form-control" id="storage-capacity" placeholder="e.g., 1TB, 16GB" required>
+              </div>
+              
+              <div class="col-md-6 mb-3">
+                <label for="type" class="form-label">Type*</label>
+                <input type="text" class="form-control" id="type" placeholder="e.g., Smartphone, Laptop" required>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Images -->
+          <div class="form-section">
+            <h4>Images</h4>
+            <div class="mb-3">
+              <label for="image-url" class="form-label">Image URL*</label>
+              <input type="url" class="form-control" id="image-url" required>
+              <div class="form-text">Direct link to your product image. Must be a publicly accessible URL.</div>
+            </div>
+          </div>
+          
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
+              Create Listing
+              <span class="spinner-border spinner-border-sm d-none" id="submit-spinner"></span>
+            </button>
+          </div>
+        </form>
+        
+        <div id="success-message" class="alert alert-success mt-4" style="display: none;">
+          <h4>Listing Created Successfully!</h4>
+          <p>Your item has been listed on eBay.</p>
+          <div id="listing-details"></div>
+          <div class="mt-3">
+            <a href="" id="view-on-ebay" class="btn btn-primary" target="_blank">View on eBay</a>
+            <a href="/listings.html" class="btn btn-secondary">View All Listings</a>
+            <button id="create-another" class="btn btn-outline-primary">Create Another Listing</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/create.js"></script>
+</body>
+</html> 
