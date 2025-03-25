@@ -129,7 +129,7 @@ async function processQueue() {
 
 // Function to create a listing
 async function createListing(item) {
-  // Create XML request body
+  // Create XML request body based on the working single listing XML structure
   const requestXml = `<?xml version="1.0" encoding="utf-8"?>
   <AddItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
     <RequesterCredentials>
@@ -152,7 +152,7 @@ async function createListing(item) {
       <ListingDuration>GTC</ListingDuration>
       <ListingType>FixedPriceItem</ListingType>
       <PictureDetails>
-        <PictureURL>${item.image_url}</PictureURL>
+        <PictureURL>${item.image_url || 'https://i.imgur.com/rvQ3LpG.jpg'}</PictureURL>
       </PictureDetails>
       <Quantity>${item.quantity}</Quantity>
       <ReturnPolicy>
@@ -167,10 +167,80 @@ async function createListing(item) {
           <ShippingServicePriority>1</ShippingServicePriority>
           <ShippingService>USPSPriority</ShippingService>
           <ShippingServiceCost>${item.shipping_cost || '0.00'}</ShippingServiceCost>
+          <ShippingServiceAdditionalCost>${item.shipping_cost || '0.00'}</ShippingServiceAdditionalCost>
         </ShippingServiceOptions>
       </ShippingDetails>
       <Site>US</Site>
-      ${parseInt(item.quantity) === 0 ? '<OutOfStockControl>true</OutOfStockControl>' : ''}
+      <Location>${item.location || 'United States'}</Location>
+      <ItemSpecifics>
+        <NameValueList>
+          <Name>Brand</Name>
+          <Value>${item.brand || getBrandFromTitle(item.title)}</Value>
+        </NameValueList>
+        ${item.processor ? `
+        <NameValueList>
+          <Name>Processor</Name>
+          <Value>${item.processor}</Value>
+        </NameValueList>` : ''}
+        ${item.screen_size ? `
+        <NameValueList>
+          <Name>Screen Size</Name>
+          <Value>${item.screen_size}</Value>
+        </NameValueList>` : ''}
+        ${item.model ? `
+        <NameValueList>
+          <Name>Model</Name>
+          <Value>${item.model}</Value>
+        </NameValueList>` : ''}
+        ${item.storage_capacity ? `
+        <NameValueList>
+          <Name>Storage Capacity</Name>
+          <Value>${item.storage_capacity}</Value>
+        </NameValueList>` : getStorageFromTitle(item.title) ? `
+        <NameValueList>
+          <Name>Storage Capacity</Name>
+          <Value>${getStorageFromTitle(item.title)}</Value>
+        </NameValueList>` : ''}
+        ${item.color ? `
+        <NameValueList>
+          <Name>Color</Name>
+          <Value>${item.color}</Value>
+        </NameValueList>` : getColorFromTitle(item.title) ? `
+        <NameValueList>
+          <Name>Color</Name>
+          <Value>${getColorFromTitle(item.title)}</Value>
+        </NameValueList>` : ''}
+        ${item.connectivity ? `
+        <NameValueList>
+          <Name>Connectivity</Name>
+          <Value>${item.connectivity}</Value>
+        </NameValueList>` : `
+        <NameValueList>
+          <Name>Connectivity</Name>
+          <Value>${getConnectivityByCategory(item.category_id)}</Value>
+        </NameValueList>`}
+        ${item.type ? `
+        <NameValueList>
+          <Name>Type</Name>
+          <Value>${item.type}</Value>
+        </NameValueList>` : `
+        <NameValueList>
+          <Name>Type</Name>
+          <Value>${getTypeByCategory(item.category_id, item.title)}</Value>
+        </NameValueList>`}
+      </ItemSpecifics>
+      <SKU>${item.sku || ''}</SKU>
+      <SellerProfiles>
+        <SellerPaymentProfile>
+          <PaymentProfileID>241761903026</PaymentProfileID>
+        </SellerPaymentProfile>
+        <SellerReturnProfile>
+          <ReturnProfileID>241759779026</ReturnProfileID>
+        </SellerReturnProfile>
+        <SellerShippingProfile>
+          <ShippingProfileID>241759783026</ShippingProfileID>
+        </SellerShippingProfile>
+      </SellerProfiles>
     </Item>
   </AddItemRequest>`;
   
@@ -201,6 +271,85 @@ async function createListing(item) {
   }
   
   return result.AddItemResponse.ItemID;
+}
+
+// Helper function to extract brand from title
+function getBrandFromTitle(title) {
+  const commonBrands = ['Apple', 'Samsung', 'Sony', 'Dell', 'HP', 'Lenovo', 'LG', 'Microsoft', 'Asus', 'Acer'];
+  for (const brand of commonBrands) {
+    if (title.includes(brand)) {
+      return brand;
+    }
+  }
+  return 'Unbranded';
+}
+
+// Helper function to extract storage capacity from title
+function getStorageFromTitle(title) {
+  const storageRegex = /(\d+)\s*(GB|TB)/i;
+  const match = title.match(storageRegex);
+  if (match) {
+    return `${match[1]} ${match[2].toUpperCase()}`;
+  }
+  return null;
+}
+
+// Helper function to extract color from title
+function getColorFromTitle(title) {
+  const commonColors = ['Black', 'White', 'Silver', 'Gold', 'Gray', 'Graphite', 'Blue', 'Red', 'Green', 'Yellow', 'Purple', 'Pink'];
+  for (const color of commonColors) {
+    if (title.includes(color)) {
+      return color;
+    }
+  }
+  return 'Not Specified';
+}
+
+// Helper function to determine connectivity based on category
+function getConnectivityByCategory(categoryId) {
+  // Map common category IDs to appropriate connectivity values
+  const categoryMap = {
+    '9355': 'Wireless', // Cell Phones
+    '177': 'Wi-Fi', // Computers
+    '44942': 'Bluetooth', // Audio equipment
+    '112529': 'Bluetooth' // Headphones
+  };
+  
+  return categoryMap[categoryId] || 'Not Specified';
+}
+
+// Helper function to determine type based on category and title
+function getTypeByCategory(categoryId, title) {
+  // For cell phones
+  if (categoryId === '9355') {
+    if (title.includes('iPhone')) return 'Smartphone';
+    if (title.includes('Galaxy')) return 'Smartphone';
+    return 'Smartphone';
+  }
+  
+  // For computers
+  if (categoryId === '177') {
+    if (title.includes('Laptop')) return 'Laptop';
+    if (title.includes('Desktop')) return 'Desktop';
+    return 'Laptop';
+  }
+  
+  // For audio equipment
+  if (categoryId === '44942') {
+    if (title.includes('AirPods')) return 'Earbuds';
+    if (title.includes('Headphones')) return 'Headphones';
+    return 'Audio Player';
+  }
+  
+  // For headphones
+  if (categoryId === '112529') {
+    if (title.includes('Wireless')) return 'Wireless';
+    if (title.includes('Over-Ear')) return 'Over-Ear';
+    if (title.includes('In-Ear')) return 'In-Ear';
+    return 'Over-Ear';
+  }
+  
+  return 'Not Specified';
 }
 
 module.exports = router; 

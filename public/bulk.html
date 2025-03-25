@@ -50,13 +50,23 @@
               <li><strong>description</strong> - Product description (HTML allowed)</li>
               <li><strong>price</strong> - Product price (e.g., 19.99)</li>
               <li><strong>quantity</strong> - Available quantity (set to 0 for out of stock)</li>
-              <li><strong>category_id</strong> - eBay category ID</li>
+              <li><strong>category_id</strong> - eBay category ID (e.g., 9355 for Cell Phones, 177 for Computers)</li>
+              <li><strong>location</strong> - Item location (e.g., United States, New York, etc.)</li>
+              <li><strong>brand</strong> - Brand name of the product (required by eBay)</li>
             </ul>
             <p>Optional columns:</p>
             <ul>
+              <li><strong>sku</strong> - Your unique SKU/identifier for the product</li>
               <li><strong>condition_id</strong> - eBay condition ID (default: 1000 - New)</li>
               <li><strong>image_url</strong> - URL to product image</li>
               <li><strong>shipping_cost</strong> - Shipping cost (default: 0.00)</li>
+              <li><strong>processor</strong> - Processor type (required for electronics)</li>
+              <li><strong>screen_size</strong> - Screen size (required for devices with screens)</li>
+              <li><strong>model</strong> - Model number or name</li>
+              <li><strong>storage_capacity</strong> - Storage capacity (required for electronics, e.g., 128GB)</li>
+              <li><strong>color</strong> - Color of the item (required for most categories)</li>
+              <li><strong>connectivity</strong> - Connectivity type (e.g., Wireless, Bluetooth, Wi-Fi)</li>
+              <li><strong>type</strong> - Product type (e.g., Smartphone, Laptop, Earbuds, Over-Ear)</li>
             </ul>
             <p><a href="/sample-bulk-upload.csv" download>Download Sample CSV</a></p>
           </div>
@@ -113,6 +123,8 @@
             <button class="btn btn-outline-primary" id="refresh-status">Refresh Status</button>
             <a href="/listings.html" class="btn btn-secondary">View All Listings</a>
           </div>
+          
+          <!-- Error log section will be dynamically inserted here -->
         </div>
       </div>
     </div>
