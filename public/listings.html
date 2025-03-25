@@ -70,6 +70,17 @@
             <label for="new-quantity" class="form-label">New Quantity</label>
             <input type="number" class="form-control" id="new-quantity" min="0" value="1">
           </div>
+          
+          <!-- Out of stock confirmation message -->
+          <div id="out-of-stock-message" class="alert alert-warning d-none">
+            <p><strong>Setting quantity to 0 will:</strong></p>
+            <ul>
+              <li>Mark this listing as "Out of Stock"</li>
+              <li>Keep the listing visible on eBay</li>
+              <li>Prevent purchases until you update the quantity</li>
+            </ul>
+            <p>Click "Save Changes" again to confirm.</p>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>

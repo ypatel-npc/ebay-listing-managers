@@ -223,8 +223,41 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
     const { itemId } = req.params;
     const { quantity } = req.body;
     
-    if (!quantity) {
+    if (quantity === undefined) {
       return res.status(400).json({ error: 'Quantity is required' });
+    }
+    
+    // Convert quantity to integer
+    const quantityValue = parseInt(quantity, 10);
+    
+    // For zero quantity, we need to use a different approach
+    if (quantityValue === 0) {
+      // First, we need to enable out of stock control at the account level
+      // This only needs to be done once per account, but we'll do it each time to be safe
+      const enableOutOfStockXml = `<?xml version="1.0" encoding="utf-8"?>
+      <SetUserPreferencesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+        <RequesterCredentials>
+          <eBayAuthToken>${req.session.authToken}</eBayAuthToken>
+        </RequesterCredentials>
+        <OutOfStockControlPreference>true</OutOfStockControlPreference>
+      </SetUserPreferencesRequest>`;
+      
+      // Enable out of stock control at account level
+      await axios({
+        method: 'post',
+        url: 'https://api.ebay.com/ws/api.dll',
+        headers: {
+          'Content-Type': 'text/xml',
+          'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
+          'X-EBAY-API-CALL-NAME': 'SetUserPreferences',
+          'X-EBAY-API-SITEID': '0',
+        },
+        data: enableOutOfStockXml
+      });
+      
+      // Now set the quantity to a very low number (1) instead of 0
+      // This is a workaround since eBay doesn't allow setting quantity to 0 directly
+      const quantityValue = 1;
     }
     
     // Create XML request body
@@ -237,7 +270,7 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
       <WarningLevel>High</WarningLevel>
       <Item>
         <ItemID>${itemId}</ItemID>
-        <Quantity>${quantity}</Quantity>
+        <Quantity>${quantityValue}</Quantity>
       </Item>
     </ReviseItemRequest>`;
     
@@ -259,12 +292,27 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
     const result = await parser.parseStringPromise(response.data);
     
     if (result.ReviseItemResponse.Ack === 'Success' || result.ReviseItemResponse.Ack === 'Warning') {
-      return res.json({ success: true, itemId });
+      return res.json({ 
+        success: true, 
+        itemId,
+        message: quantityValue === 0 ? 
+          'Out of stock control enabled for your account. Set quantity to minimum value.' : 
+          'Quantity updated successfully'
+      });
     } else {
-      return res.status(400).json({ error: 'Failed to update quantity' });
+      const errors = result.ReviseItemResponse.Errors;
+      const errorMsg = Array.isArray(errors) 
+        ? errors.map(e => e.LongMessage).join(', ') 
+        : errors?.LongMessage || 'Failed to update quantity';
+      
+      return res.status(400).json({ error: errorMsg });
     }
   } catch (error) {
-    return res.status(500).json({ error: 'Error updating quantity', details: error.message });
+    console.error('Error updating quantity:', error);
+    return res.status(500).json({ 
+      error: 'Error updating quantity', 
+      details: error.response?.data || error.message 
+    });
   }
 });
 

@@ -92,10 +92,18 @@ function renderListings(listings) {
 async function updateQuantity() {
   const itemId = document.getElementById('modal-item-id').value;
   const quantity = document.getElementById('new-quantity').value;
+  const outOfStockMsg = document.getElementById('out-of-stock-message');
   
-  if (!itemId || !quantity) {
+  if (!itemId || quantity === undefined) {
     showAlert('Item ID and quantity are required', 'danger');
     return;
+  }
+  
+  // Show warning if quantity is 0
+  if (parseInt(quantity) === 0 && !outOfStockMsg.classList.contains('show')) {
+    outOfStockMsg.classList.remove('d-none');
+    outOfStockMsg.classList.add('show');
+    return; // Don't proceed until user confirms
   }
   
   try {
@@ -114,7 +122,7 @@ async function updateQuantity() {
       const modal = bootstrap.Modal.getInstance(document.getElementById('updateQuantityModal'));
       modal.hide();
       
-      showAlert('Quantity updated successfully', 'success');
+      showAlert(data.message || 'Quantity updated successfully', 'success');
       
       // Reload listings after a short delay
       setTimeout(() => {
