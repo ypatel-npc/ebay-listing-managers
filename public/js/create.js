@@ -33,94 +33,40 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-// Function to search for categories
-async function searchCategories() {
-  const query = document.getElementById('category-search').value.trim();
-  
-  if (!query) {
-    showAlert('Please enter a search term', 'warning');
-    return;
-  }
-  
-  try {
-    const response = await fetch(`/api/inventory/categories?query=${encodeURIComponent(query)}`);
-    const data = await response.json();
-    
-    if (response.ok) {
-      const categorySelect = document.getElementById('category');
-      
-      // Clear existing options except the first one
-      while (categorySelect.options.length > 1) {
-        categorySelect.remove(1);
-      }
-      
-      // Add new options
-      if (data.categories && data.categories.length > 0) {
-        data.categories.forEach(category => {
-          const option = document.createElement('option');
-          option.value = category.categoryId;
-          option.textContent = category.name;
-          categorySelect.appendChild(option);
-        });
-        
-        showAlert(`Found ${data.categories.length} categories matching "${query}"`, 'success');
-      } else {
-        showAlert(`No categories found matching "${query}"`, 'warning');
-      }
-    } else {
-      showAlert('Error searching categories: ' + data.error, 'danger');
-    }
-  } catch (error) {
-    showAlert('Error searching categories. Please try again.', 'danger');
-    console.error('Error searching categories:', error);
-  }
-}
-
 // Function to load conditions for selected category
 async function loadConditions() {
-  const categoryId = document.getElementById('category').value;
+  const categoryId = document.getElementById('category').value.trim();
   
   if (!categoryId) {
+    showAlert('Please enter a valid category ID', 'warning');
     return;
   }
   
   try {
+    document.getElementById('condition-spinner').classList.remove('d-none');
+    
     const response = await fetch(`/api/inventory/conditions/${categoryId}`);
     const data = await response.json();
     
-    if (response.ok) {
-      const conditionSelect = document.getElementById('condition');
-      
-      // Clear existing options except the first one
-      while (conditionSelect.options.length > 1) {
-        conditionSelect.remove(1);
-      }
-      
-      // Add new options
-      if (data.conditions && data.conditions.length > 0) {
-        data.conditions.forEach(condition => {
-          const option = document.createElement('option');
-          option.value = condition.id;
-          option.textContent = condition.name;
-          conditionSelect.appendChild(option);
-        });
-      } else {
-        // Add default conditions if none returned from API
-        const defaultConditions = [
-          { id: '1000', name: 'New' },
-          { id: '3000', name: 'Used' },
-          { id: '7000', name: 'For parts or not working' }
-        ];
-        
-        defaultConditions.forEach(condition => {
-          const option = document.createElement('option');
-          option.value = condition.id;
-          option.textContent = condition.name;
-          conditionSelect.appendChild(option);
-        });
-      }
+    if (!response.ok) {
+      throw new Error(data.error || 'Error loading conditions');
     }
+    
+    const conditionSelect = document.getElementById('condition');
+    conditionSelect.innerHTML = '<option value="">Select condition</option>';
+    
+    data.conditions.forEach(condition => {
+      const option = document.createElement('option');
+      option.value = condition.ID;
+      option.textContent = condition.DisplayName;
+      conditionSelect.appendChild(option);
+    });
+    
+    document.getElementById('condition-spinner').classList.add('d-none');
+    document.getElementById('condition-group').classList.remove('d-none');
   } catch (error) {
+    document.getElementById('condition-spinner').classList.add('d-none');
+    showAlert('Error loading conditions. Please check if the category ID is valid.', 'danger');
     console.error('Error loading conditions:', error);
   }
 }

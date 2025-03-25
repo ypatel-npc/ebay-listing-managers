@@ -55,17 +55,26 @@
             
             <div class="row">
               <div class="col-md-6 mb-3">
-                <label for="category-search" class="form-label">Search for Category</label>
-                <div class="input-group">
-                  <input type="text" class="form-control" id="category-search" placeholder="e.g., computer, phone">
-                  <button class="btn btn-outline-secondary" type="button" id="search-category-btn">Search</button>
-                </div>
+                <label for="category" class="form-label">Category ID</label>
+                <input type="text" class="form-control" id="category" name="category" required 
+                       placeholder="Enter eBay category ID (e.g., 9355 for Cell Phones)">
+                <div class="form-text">Common categories: 9355 (Cell Phones), 177 (Computers), 44942 (Audio)</div>
               </div>
               
               <div class="col-md-6 mb-3">
-                <label for="category" class="form-label">Category*</label>
-                <select class="form-control" id="category" required>
-                  <option value="">Select a category</option>
+                <label for="condition" class="form-label">Condition*</label>
+                <select class="form-control" id="condition" required>
+                  <option value="">Select condition</option>
+                  <option value="1000">New</option>
+                  <option value="1500">New other (see details)</option>
+                  <option value="1750">New with defects</option>
+                  <option value="2000">Certified refurbished</option>
+                  <option value="2500">Seller refurbished</option>
+                  <option value="3000">Used</option>
+                  <option value="4000">Very Good</option>
+                  <option value="5000">Good</option>
+                  <option value="6000">Acceptable</option>
+                  <option value="7000">For parts or not working</option>
                 </select>
               </div>
             </div>
@@ -81,23 +90,6 @@
                   <span class="input-group-text">$</span>
                   <input type="number" class="form-control" id="price" step="0.01" min="0.01" required>
                 </div>
-              </div>
-              
-              <div class="col-md-4 mb-3">
-                <label for="condition" class="form-label">Condition*</label>
-                <select class="form-control" id="condition" required>
-                  <option value="">Select condition</option>
-                  <option value="1000">New</option>
-                  <option value="1500">New other (see details)</option>
-                  <option value="1750">New with defects</option>
-                  <option value="2000">Certified refurbished</option>
-                  <option value="2500">Seller refurbished</option>
-                  <option value="3000">Used</option>
-                  <option value="4000">Very Good</option>
-                  <option value="5000">Good</option>
-                  <option value="6000">Acceptable</option>
-                  <option value="7000">For parts or not working</option>
-                </select>
               </div>
               
               <div class="col-md-4 mb-3">
