@@ -50,7 +50,8 @@
               <li><strong>description</strong> - Product description (HTML allowed)</li>
               <li><strong>price</strong> - Product price (e.g., 19.99)</li>
               <li><strong>quantity</strong> - Available quantity (set to 0 for out of stock)</li>
-              <li><strong>category_id</strong> - eBay category ID</li>
+              <li><strong>category_id</strong> - eBay category ID (e.g., 9355 for automotive parts)</li>
+              <li><strong>location</strong> - Item location (e.g., "New York" or "United States")</li>
             </ul>
             <p>Optional columns:</p>
             <ul>
@@ -58,7 +59,22 @@
               <li><strong>image_url</strong> - URL to product image</li>
               <li><strong>shipping_cost</strong> - Shipping cost (default: 0.00)</li>
             </ul>
-            <p><a href="/sample-bulk-upload.csv" download>Download Sample CSV</a></p>
+            <p><strong>Item Specifics:</strong></p>
+            <p>Add item specifics by creating columns with the prefix <code>specific_</code> followed by the name of the specific. For example:</p>
+            <ul>
+              <li><strong>specific_Brand</strong> - Brand name</li>
+              <li><strong>specific_Model</strong> - Model name/number</li>
+              <li><strong>specific_Color</strong> - Color</li>
+              <li><strong>specific_Storage_Capacity</strong> - Storage capacity</li>
+            </ul>
+            <p><strong>Notes:</strong></p>
+            <ul>
+              <li>Required item specifics vary by category. If you don't provide all required specifics, the system will attempt to add default values.</li>
+              <li>For automotive parts, use category ID 9355 (Auto Parts).</li>
+              <li>The system will verify if the category is valid and use a default if not.</li>
+              <li>Your eBay business policies will be used automatically.</li>
+            </ul>
+            <p><a href="/sample-automotive-parts.csv" download>Download Sample CSV</a></p>
           </div>
           
           <form id="bulk-upload-form" enctype="multipart/form-data">
@@ -114,6 +130,18 @@
             <a href="/listings.html" class="btn btn-secondary">View All Listings</a>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Error Log</h5>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="view-error-log">
+          <i class="bi bi-eye"></i> View Errors
+        </button>
+      </div>
+      <div class="card-body" id="error-log-container" style="display: none;">
+        <pre id="error-log" class="bg-light p-3" style="max-height: 400px; overflow-y: auto;">Loading error log...</pre>
       </div>
     </div>
   </div>

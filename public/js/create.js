@@ -36,19 +36,28 @@ document.addEventListener('DOMContentLoaded', function() {
 // Function to search for categories
 async function searchCategories() {
   const query = document.getElementById('category-search').value.trim();
+  const categorySelect = document.getElementById('category');
   
   if (!query) {
     showAlert('Please enter a search term', 'warning');
     return;
   }
   
+  // Show loading indicator
+  const searchButton = document.querySelector('#search-category-btn');
+  const originalButtonText = searchButton.innerHTML;
+  searchButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Searching...';
+  searchButton.disabled = true;
+  
   try {
     const response = await fetch(`/api/inventory/categories?query=${encodeURIComponent(query)}`);
     const data = await response.json();
     
+    // Reset button
+    searchButton.innerHTML = originalButtonText;
+    searchButton.disabled = false;
+    
     if (response.ok) {
-      const categorySelect = document.getElementById('category');
-      
       // Clear existing options except the first one
       while (categorySelect.options.length > 1) {
         categorySelect.remove(1);
@@ -63,7 +72,12 @@ async function searchCategories() {
           categorySelect.appendChild(option);
         });
         
-        showAlert(`Found ${data.categories.length} categories matching "${query}"`, 'success');
+        // Show source of categories if using fallback
+        if (data.source === 'fallback') {
+          showAlert(`Found ${data.categories.length} categories matching "${query}" (using offline database)`, 'info');
+        } else {
+          showAlert(`Found ${data.categories.length} categories matching "${query}"`, 'success');
+        }
       } else {
         showAlert(`No categories found matching "${query}"`, 'warning');
       }
@@ -71,9 +85,74 @@ async function searchCategories() {
       showAlert('Error searching categories: ' + data.error, 'danger');
     }
   } catch (error) {
+    // Reset button
+    searchButton.innerHTML = originalButtonText;
+    searchButton.disabled = false;
+    
     showAlert('Error searching categories. Please try again.', 'danger');
     console.error('Error searching categories:', error);
+    
+    // Show manual category ID input
+    showManualCategoryInput();
   }
+}
+
+// Function to show manual category ID input
+function showManualCategoryInput() {
+  const categoryFormGroup = document.querySelector('.form-group:has(#category)');
+  
+  // Check if manual input already exists
+  if (document.getElementById('manual-category-id')) {
+    return;
+  }
+  
+  const manualInputHtml = `
+    <div class="mt-3 p-3 border rounded bg-light">
+      <p class="mb-2"><strong>Can't find your category?</strong> Enter the eBay category ID manually:</p>
+      <div class="input-group">
+        <input type="text" class="form-control" id="manual-category-id" placeholder="e.g., 9355">
+        <button class="btn btn-outline-secondary" type="button" id="use-manual-category">Use This ID</button>
+      </div>
+      <small class="text-muted">Find category IDs on <a href="https://www.ebay.com/sch/allcategories/all-categories" target="_blank">eBay's category list</a></small>
+    </div>
+  `;
+  
+  // Add manual input after the category select
+  const manualInputDiv = document.createElement('div');
+  manualInputDiv.innerHTML = manualInputHtml;
+  categoryFormGroup.appendChild(manualInputDiv);
+  
+  // Add event listener for the manual category button
+  document.getElementById('use-manual-category').addEventListener('click', function() {
+    const manualCategoryId = document.getElementById('manual-category-id').value.trim();
+    if (!manualCategoryId) {
+      showAlert('Please enter a category ID', 'warning');
+      return;
+    }
+    
+    // Add the manual category to the select
+    const categorySelect = document.getElementById('category');
+    
+    // Check if this ID already exists
+    for (let i = 0; i < categorySelect.options.length; i++) {
+      if (categorySelect.options[i].value === manualCategoryId) {
+        categorySelect.value = manualCategoryId;
+        showAlert('Category ID already in the list and selected', 'info');
+        return;
+      }
+    }
+    
+    // Add new option
+    const option = document.createElement('option');
+    option.value = manualCategoryId;
+    option.textContent = `Custom Category (ID: ${manualCategoryId})`;
+    categorySelect.appendChild(option);
+    
+    // Select the new option
+    categorySelect.value = manualCategoryId;
+    
+    showAlert('Manual category ID added', 'success');
+  });
 }
 
 // Function to load conditions for selected category

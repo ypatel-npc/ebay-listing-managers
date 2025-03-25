@@ -10,6 +10,27 @@ document.addEventListener('DOMContentLoaded', function() {
       // Set up event listeners
       document.getElementById('bulk-upload-form').addEventListener('submit', uploadCSV);
       document.getElementById('refresh-status').addEventListener('click', checkStatus);
+      document.getElementById('view-error-log').addEventListener('click', function() {
+        const logContainer = document.getElementById('error-log-container');
+        const logContent = document.getElementById('error-log');
+        
+        // Toggle visibility
+        if (logContainer.style.display === 'none') {
+          logContainer.style.display = 'block';
+          
+          // Fetch error log
+          fetch('/api/bulk/error-log')
+            .then(response => response.json())
+            .then(data => {
+              logContent.textContent = data.log || 'No errors logged.';
+            })
+            .catch(error => {
+              logContent.textContent = 'Error loading log: ' + error.message;
+            });
+        } else {
+          logContainer.style.display = 'none';
+        }
+      });
       
     } else {
       // Redirect to login page
@@ -141,4 +162,37 @@ function showAlert(message, type = 'info') {
     const bsAlert = new bootstrap.Alert(alert);
     bsAlert.close();
   }, 5000);
-} 
+}
+
+// Add this function to fetch and display logs
+async function fetchLogs() {
+  try {
+    const response = await fetch('/api/bulk/logs');
+    const data = await response.json();
+    
+    const logsTable = document.getElementById('logs-table').querySelector('tbody');
+    
+    if (data.logs && data.logs.length > 0) {
+      // Clear existing rows
+      logsTable.innerHTML = '';
+      
+      // Add log entries
+      data.logs.forEach(log => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${log.timestamp}</td>
+          <td>${log.size}</td>
+          <td>
+            <a href="${log.path}" class="btn btn-sm btn-outline-primary" download>
+              <i class="bi bi-download"></i> Download
+            </a>
+          </td>
+        `;
+        logsTable.appendChild(row);
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching logs:', error);
+    showAlert('Error fetching logs. Please try again.', 'danger');
+  }
+}

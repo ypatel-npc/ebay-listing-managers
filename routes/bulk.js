@@ -18,6 +18,31 @@ const upload = multer({
 const listingQueue = [];
 let isProcessing = false;
 
+// Create logs directory if it doesn't exist
+const logsDir = path.join(__dirname, '..', 'logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+
+// Function to log bulk upload errors
+function logBulkUploadError(item, error) {
+  const timestamp = new Date().toISOString();
+  const logFileName = 'bulk_upload_errors.log';
+  const logFilePath = path.join(logsDir, logFileName);
+  
+  let logEntry = `[${timestamp}] ERROR: ${error}\n`;
+  logEntry += `Title: ${item.title}\n`;
+  logEntry += `Category: ${item.category_id}\n`;
+  logEntry += `Price: ${item.price}\n`;
+  logEntry += `Image: ${item.image_url}\n`;
+  logEntry += `-------------------------------------------\n\n`;
+  
+  // Append to log file
+  fs.appendFileSync(logFilePath, logEntry);
+  
+  console.log(`Error logged to ${logFilePath}`);
+}
+
 // Route to upload CSV file
 router.post('/upload', isAuthenticated, upload.single('csvFile'), (req, res) => {
   if (!req.file) {
@@ -129,78 +154,179 @@ async function processQueue() {
 
 // Function to create a listing
 async function createListing(item) {
-  // Create XML request body
-  const requestXml = `<?xml version="1.0" encoding="utf-8"?>
-  <AddItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-    <RequesterCredentials>
-      <eBayAuthToken>${item.authToken}</eBayAuthToken>
-    </RequesterCredentials>
-    <ErrorLanguage>en_US</ErrorLanguage>
-    <WarningLevel>High</WarningLevel>
-    <Item>
-      <Title>${item.title}</Title>
-      <Description><![CDATA[${item.description}]]></Description>
-      <PrimaryCategory>
-        <CategoryID>${item.category_id}</CategoryID>
-      </PrimaryCategory>
-      <StartPrice>${item.price}</StartPrice>
-      <CategoryMappingAllowed>true</CategoryMappingAllowed>
-      <ConditionID>${item.condition_id || '1000'}</ConditionID>
-      <Country>US</Country>
-      <Currency>USD</Currency>
-      <DispatchTimeMax>3</DispatchTimeMax>
-      <ListingDuration>GTC</ListingDuration>
-      <ListingType>FixedPriceItem</ListingType>
-      <PictureDetails>
-        <PictureURL>${item.image_url}</PictureURL>
-      </PictureDetails>
-      <Quantity>${item.quantity}</Quantity>
-      <ReturnPolicy>
-        <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
-        <RefundOption>MoneyBack</RefundOption>
-        <ReturnsWithinOption>Days_30</ReturnsWithinOption>
-        <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
-      </ReturnPolicy>
-      <ShippingDetails>
-        <ShippingType>Flat</ShippingType>
-        <ShippingServiceOptions>
-          <ShippingServicePriority>1</ShippingServicePriority>
-          <ShippingService>USPSPriority</ShippingService>
-          <ShippingServiceCost>${item.shipping_cost || '0.00'}</ShippingServiceCost>
-        </ShippingServiceOptions>
-      </ShippingDetails>
-      <Site>US</Site>
-      ${parseInt(item.quantity) === 0 ? '<OutOfStockControl>true</OutOfStockControl>' : ''}
-    </Item>
-  </AddItemRequest>`;
-  
-  // Make API request
-  const response = await axios({
-    method: 'post',
-    url: 'https://api.ebay.com/ws/api.dll',
-    headers: {
-      'Content-Type': 'text/xml',
-      'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
-      'X-EBAY-API-CALL-NAME': 'AddItem',
-      'X-EBAY-API-SITEID': '0',
-    },
-    data: requestXml
-  });
-  
-  // Parse XML response
-  const parser = new xml2js.Parser({ explicitArray: false });
-  const result = await parser.parseStringPromise(response.data);
-  
-  if (result.AddItemResponse.Ack !== 'Success' && result.AddItemResponse.Ack !== 'Warning') {
-    const errors = result.AddItemResponse.Errors;
-    const errorMsg = Array.isArray(errors) 
-      ? errors.map(e => e.LongMessage).join(', ') 
-      : errors?.LongMessage || 'Failed to create listing';
+  try {
+    // Process item specifics from CSV
+    let itemSpecificsXml = '';
     
-    throw new Error(errorMsg);
+    // Check if we have item specifics in the CSV
+    const itemSpecifics = [];
+    
+    // Look for columns that start with "specific_" in the CSV data
+    Object.keys(item).forEach(key => {
+      if (key.startsWith('specific_') && item[key]) {
+        const name = key.replace('specific_', '').replace(/_/g, ' ');
+        itemSpecifics.push({
+          name: name,
+          value: item[key]
+        });
+      }
+    });
+    
+    // Add required item specifics based on category if not already present
+    addRequiredItemSpecifics(itemSpecifics, item.category_id);
+    
+    // Generate XML for item specifics
+    if (itemSpecifics.length > 0) {
+      itemSpecificsXml = `
+      <ItemSpecifics>
+        ${itemSpecifics.map(spec => `
+        <NameValueList>
+          <Name>${spec.name}</Name>
+          <Value>${spec.value}</Value>
+        </NameValueList>`).join('')}
+      </ItemSpecifics>`;
+    }
+    
+    // Get eBay API credentials and business policies from config
+    const config = require('../config');
+    
+    // Use the provided category ID directly
+    const categoryId = item.category_id || '9355';
+    
+    // Always include condition for automotive parts
+    const conditionXml = `<ConditionID>${item.condition_id || '1000'}</ConditionID>`;
+    
+    // Create XML request body with business policies
+    let requestXml = `<?xml version="1.0" encoding="utf-8"?>
+    <AddItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+      <RequesterCredentials>
+        <eBayAuthToken>${item.authToken}</eBayAuthToken>
+      </RequesterCredentials>
+      <ErrorLanguage>en_US</ErrorLanguage>
+      <WarningLevel>High</WarningLevel>
+      <Item>
+        <Title>${item.title}</Title>
+        <Description><![CDATA[${item.description}]]></Description>
+        <PrimaryCategory>
+          <CategoryID>${categoryId}</CategoryID>
+        </PrimaryCategory>
+        <StartPrice>${item.price}</StartPrice>
+        <CategoryMappingAllowed>true</CategoryMappingAllowed>
+        ${conditionXml}
+        <Country>US</Country>
+        <Currency>USD</Currency>
+        <DispatchTimeMax>3</DispatchTimeMax>
+        <ListingDuration>GTC</ListingDuration>
+        <ListingType>FixedPriceItem</ListingType>
+        <Location>${item.location || 'United States'}</Location>
+        ${item.image_url ? `
+        <PictureDetails>
+          <PictureURL>${item.image_url}</PictureURL>
+        </PictureDetails>
+        ` : ''}
+        ${itemSpecificsXml}
+        <Quantity>${item.quantity}</Quantity>
+        
+        <!-- Add business policies from config -->
+        <SellerProfiles>
+          <SellerShippingProfile>
+            <ShippingProfileID>${config.shippingProfileId}</ShippingProfileID>
+          </SellerShippingProfile>
+          <SellerReturnProfile>
+            <ReturnProfileID>${config.returnProfileId}</ReturnProfileID>
+          </SellerReturnProfile>
+          <SellerPaymentProfile>
+            <PaymentProfileID>${config.paymentProfileId}</PaymentProfileID>
+          </SellerPaymentProfile>
+        </SellerProfiles>
+      </Item>
+    </AddItemRequest>`;
+    
+    // Make API request
+    const response = await axios({
+      method: 'post',
+      url: 'https://api.ebay.com/ws/api.dll',
+      headers: {
+        'Content-Type': 'text/xml',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
+        'X-EBAY-API-CALL-NAME': 'AddItem',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-APP-NAME': config.ebay.appId,
+        'X-EBAY-API-DEV-NAME': config.ebay.devId,
+        'X-EBAY-API-CERT-NAME': config.ebay.certId
+      },
+      data: requestXml
+    });
+    
+    // Parse XML response
+    const parser = new xml2js.Parser({ explicitArray: false });
+    const result = await parser.parseStringPromise(response.data);
+    
+    if (result.AddItemResponse.Ack !== 'Success' && result.AddItemResponse.Ack !== 'Warning') {
+      const errors = result.AddItemResponse.Errors;
+      const errorMsg = Array.isArray(errors) 
+        ? errors.map(e => e.LongMessage).join(', ') 
+        : errors?.LongMessage || 'Failed to create listing';
+      
+      // Log the error
+      logBulkUploadError(item, errorMsg);
+      
+      throw new Error(errorMsg);
+    }
+    
+    return result.AddItemResponse.ItemID;
+  } catch (error) {
+    // Log any other errors
+    logBulkUploadError(item, error.message);
+    throw error;
   }
-  
-  return result.AddItemResponse.ItemID;
 }
+
+// Function to add required item specifics based on category
+function addRequiredItemSpecifics(itemSpecifics, categoryId) {
+  // For category 9355 (Auto Parts), add required item specifics if not already present
+  if (categoryId === '9355') {
+    // Check if Brand is present
+    if (!itemSpecifics.some(spec => spec.name === 'Brand')) {
+      itemSpecifics.push({
+        name: 'Brand',
+        value: 'NPC Automotive'
+      });
+    }
+    
+    // Check if Manufacturer Part Number is present
+    if (!itemSpecifics.some(spec => spec.name === 'Manufacturer Part Number')) {
+      itemSpecifics.push({
+        name: 'Manufacturer Part Number',
+        value: 'NPC-' + Math.floor(Math.random() * 1000000)
+      });
+    }
+    
+    // Check if Fitment Type is present
+    if (!itemSpecifics.some(spec => spec.name === 'Fitment Type')) {
+      itemSpecifics.push({
+        name: 'Fitment Type',
+        value: 'Direct Replacement'
+      });
+    }
+  }
+}
+
+// Add a route to view the error log
+router.get('/error-log', isAuthenticated, (req, res) => {
+  try {
+    const logFilePath = path.join(logsDir, 'bulk_upload_errors.log');
+    
+    if (!fs.existsSync(logFilePath)) {
+      return res.json({ log: 'No errors logged yet.' });
+    }
+    
+    const logContent = fs.readFileSync(logFilePath, 'utf8');
+    return res.json({ log: logContent });
+  } catch (error) {
+    console.error('Error reading error log:', error);
+    return res.status(500).json({ error: 'Error reading error log' });
+  }
+});
 
 module.exports = router; 

@@ -72,50 +72,46 @@ router.get('/', isAuthenticated, async (req, res) => {
 
 // Create a new listing
 router.post('/', isAuthenticated, async (req, res) => {
-  console.log('Received create listing request');
-  
   try {
-    const {
-      title,
-      description,
-      categoryId,
-      price,
-      conditionId,
-      quantity,
-      imageUrl,
-      itemSpecifics,
-      outOfStockControl
-    } = req.body;
-    
-    console.log('Extracted fields for validation:');
-    console.log('title:', title);
-    console.log('description:', description);
-    console.log('categoryId:', categoryId);
-    console.log('price:', price);
-    console.log('conditionId:', conditionId);
-    console.log('imageUrl:', imageUrl);
+    const { title, description, price, quantity, categoryId, conditionId, imageUrl, itemSpecifics, location } = req.body;
     
     // Validate required fields
-    if (!title || !description || !categoryId || !price || !conditionId || !imageUrl) {
-      console.log('Validation failed - missing required fields');
+    if (!title || !description || !price || !quantity || !categoryId) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    // Create XML request body
-    let nameValueList = '';
-    if (itemSpecifics) {
-      for (const [name, value] of Object.entries(itemSpecifics)) {
-        if (value) {
-          nameValueList += `
-            <NameValueList>
-              <Name>${name.charAt(0).toUpperCase() + name.slice(1)}</Name>
-              <Value>${value}</Value>
-            </NameValueList>`;
-        }
-      }
+    console.log('Creating listing with category ID:', categoryId);
+    
+    // Generate item specifics XML
+    let itemSpecificsXml = '';
+    if (itemSpecifics && itemSpecifics.length > 0) {
+      itemSpecificsXml = `
+      <ItemSpecifics>
+        ${itemSpecifics.map(spec => `
+        <NameValueList>
+          <Name>${spec.name}</Name>
+          <Value>${spec.value}</Value>
+        </NameValueList>`).join('')}
+      </ItemSpecifics>`;
     }
     
-    const requestXml = `<?xml version="1.0" encoding="utf-8"?>
+    // Use the provided category ID directly without verification
+    const finalCategoryId = categoryId;
+    
+    // Always include condition for automotive parts
+    let conditionXml = '';
+    if (conditionId) {
+      conditionXml = `<ConditionID>${conditionId}</ConditionID>`;
+    } else {
+      // Default to New (1000) if no condition is provided
+      conditionXml = `<ConditionID>1000</ConditionID>`;
+    }
+    
+    // Get eBay API credentials and business policies from config
+    const config = require('../config');
+    
+    // Create XML request body with business policies
+    let requestXml = `<?xml version="1.0" encoding="utf-8"?>
     <AddItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
       <RequesterCredentials>
         <eBayAuthToken>${req.session.authToken}</eBayAuthToken>
@@ -124,28 +120,28 @@ router.post('/', isAuthenticated, async (req, res) => {
       <WarningLevel>High</WarningLevel>
       <Item>
         <Title>${title}</Title>
-        <Description>${description}</Description>
+        <Description><![CDATA[${description}]]></Description>
         <PrimaryCategory>
-          <CategoryID>${categoryId}</CategoryID>
+          <CategoryID>${finalCategoryId}</CategoryID>
         </PrimaryCategory>
         <StartPrice>${price}</StartPrice>
         <CategoryMappingAllowed>true</CategoryMappingAllowed>
-        <ConditionID>${conditionId}</ConditionID>
+        ${conditionXml}
         <Country>US</Country>
         <Currency>USD</Currency>
         <DispatchTimeMax>3</DispatchTimeMax>
         <ListingDuration>GTC</ListingDuration>
         <ListingType>FixedPriceItem</ListingType>
+        <Location>${location || 'United States'}</Location>
+        ${imageUrl ? `
         <PictureDetails>
           <PictureURL>${imageUrl}</PictureURL>
         </PictureDetails>
-        <PostalCode>95125</PostalCode>
-        <Quantity>${quantity || '1'}</Quantity>
+        ` : ''}
+        ${itemSpecificsXml}
+        <Quantity>${quantity}</Quantity>
         
-        <ItemSpecifics>
-          ${nameValueList}
-        </ItemSpecifics>
-        
+        <!-- Add business policies from config -->
         <SellerProfiles>
           <SellerShippingProfile>
             <ShippingProfileID>${config.shippingProfileId}</ShippingProfileID>
@@ -157,10 +153,77 @@ router.post('/', isAuthenticated, async (req, res) => {
             <PaymentProfileID>${config.paymentProfileId}</PaymentProfileID>
           </SellerPaymentProfile>
         </SellerProfiles>
-        
-        <Site>US</Site>
       </Item>
     </AddItemRequest>`;
+    
+    try {
+      // Make API request
+      const response = await axios({
+        method: 'post',
+        url: 'https://api.ebay.com/ws/api.dll',
+        headers: {
+          'Content-Type': 'text/xml',
+          'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
+          'X-EBAY-API-CALL-NAME': 'AddItem',
+          'X-EBAY-API-SITEID': '0',
+          'X-EBAY-API-APP-NAME': config.ebay.appId,
+          'X-EBAY-API-DEV-NAME': config.ebay.devId,
+          'X-EBAY-API-CERT-NAME': config.ebay.certId
+        },
+        data: requestXml
+      });
+      
+      // Parse XML response
+      const parser = new xml2js.Parser({ explicitArray: false });
+      const result = await parser.parseStringPromise(response.data);
+      
+      if (result.AddItemResponse.Ack === 'Success' || result.AddItemResponse.Ack === 'Warning') {
+        return res.json({
+          success: true,
+          itemId: result.AddItemResponse.ItemID,
+          fees: result.AddItemResponse.Fees
+        });
+      } else {
+        const errors = result.AddItemResponse.Errors;
+        const errorMsg = Array.isArray(errors) 
+          ? errors.map(e => e.LongMessage).join(', ') 
+          : errors?.LongMessage || 'Failed to create listing';
+        
+        return res.status(400).json({ error: errorMsg });
+      }
+    } catch (apiError) {
+      console.error('API error creating listing:', apiError.message);
+      return res.status(500).json({ 
+        error: 'Error creating listing', 
+        details: apiError.response?.data || apiError.message 
+      });
+    }
+  } catch (error) {
+    console.error('Error creating listing:', error);
+    return res.status(500).json({ error: 'Error creating listing', details: error.message });
+  }
+});
+
+// Helper function to get leaf category
+async function getLeafCategory(categoryId, authToken) {
+  try {
+    // If the category ID is 9355, return it immediately as we know it's a leaf category
+    if (categoryId === '9355') {
+      return categoryId;
+    }
+    
+    const config = require('../config');
+    
+    // Create XML request body
+    const requestXml = `<?xml version="1.0" encoding="utf-8"?>
+    <GetCategoriesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+      <RequesterCredentials>
+        <eBayAuthToken>${authToken}</eBayAuthToken>
+      </RequesterCredentials>
+      <CategoryParent>${categoryId}</CategoryParent>
+      <DetailLevel>ReturnAll</DetailLevel>
+      <LevelLimit>1</LevelLimit>
+    </GetCategoriesRequest>`;
     
     // Make API request
     const response = await axios({
@@ -169,8 +232,11 @@ router.post('/', isAuthenticated, async (req, res) => {
       headers: {
         'Content-Type': 'text/xml',
         'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
-        'X-EBAY-API-CALL-NAME': 'AddItem',
+        'X-EBAY-API-CALL-NAME': 'GetCategories',
         'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-APP-NAME': config.ebay.appId,
+        'X-EBAY-API-DEV-NAME': config.ebay.devId,
+        'X-EBAY-API-CERT-NAME': config.ebay.certId
       },
       data: requestXml
     });
@@ -179,43 +245,164 @@ router.post('/', isAuthenticated, async (req, res) => {
     const parser = new xml2js.Parser({ explicitArray: false });
     const result = await parser.parseStringPromise(response.data);
     
-    if (result.AddItemResponse.Ack === 'Success' || result.AddItemResponse.Ack === 'Warning') {
-      const itemId = result.AddItemResponse.ItemID;
-      const listingUrl = `https://www.ebay.com/itm/${itemId}`;
+    if (result.GetCategoriesResponse.Ack === 'Success' || result.GetCategoriesResponse.Ack === 'Warning') {
+      // Check if we have child categories
+      if (result.GetCategoriesResponse.CategoryArray && result.GetCategoriesResponse.CategoryArray.Category) {
+        const categories = Array.isArray(result.GetCategoriesResponse.CategoryArray.Category) 
+          ? result.GetCategoriesResponse.CategoryArray.Category 
+          : [result.GetCategoriesResponse.CategoryArray.Category];
+        
+        // If we have child categories, return the first one
+        if (categories.length > 0) {
+          return categories[0].CategoryID;
+        }
+      }
+    }
+    
+    // If no child categories or error, return the original category ID
+    return categoryId;
+  } catch (error) {
+    console.error('Error in getLeafCategory:', error.message);
+    return categoryId; // Return the original category ID if there's an error
+  }
+}
+
+// Helper function to check if condition is applicable for a category
+async function checkConditionApplicable(categoryId, authToken) {
+  try {
+    const config = require('../config');
+    
+    // For category 9355, condition is applicable
+    if (categoryId === '9355') {
+      return true;
+    }
+    
+    // Create XML request body
+    const requestXml = `<?xml version="1.0" encoding="utf-8"?>
+    <GetCategoryFeaturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+      <RequesterCredentials>
+        <eBayAuthToken>${authToken}</eBayAuthToken>
+      </RequesterCredentials>
+      <CategoryID>${categoryId}</CategoryID>
+      <FeatureID>ConditionEnabled</FeatureID>
+    </GetCategoryFeaturesRequest>`;
+    
+    // Make API request
+    const response = await axios({
+      method: 'post',
+      url: 'https://api.ebay.com/ws/api.dll',
+      headers: {
+        'Content-Type': 'text/xml',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
+        'X-EBAY-API-CALL-NAME': 'GetCategoryFeatures',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-APP-NAME': config.ebay.appId,
+        'X-EBAY-API-DEV-NAME': config.ebay.devId,
+        'X-EBAY-API-CERT-NAME': config.ebay.certId
+      },
+      data: requestXml
+    });
+    
+    // Parse XML response
+    const parser = new xml2js.Parser({ explicitArray: false });
+    const result = await parser.parseStringPromise(response.data);
+    
+    if (result.GetCategoryFeaturesResponse.Ack === 'Success' || result.GetCategoryFeaturesResponse.Ack === 'Warning') {
+      const category = result.GetCategoryFeaturesResponse.Category;
+      if (category && category.ConditionEnabled === 'true') {
+        return true;
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error in checkConditionApplicable:', error.message);
+    return true; // Default to true if there's an error
+  }
+}
+
+// Helper function to get business policies
+async function getBusinessPolicies(authToken) {
+  try {
+    const config = require('../config');
+    
+    // Create XML request body
+    const requestXml = `<?xml version="1.0" encoding="utf-8"?>
+    <GetSellerProfilesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+      <RequesterCredentials>
+        <eBayAuthToken>${authToken}</eBayAuthToken>
+      </RequesterCredentials>
+    </GetSellerProfilesRequest>`;
+    
+    // Make API request
+    const response = await axios({
+      method: 'post',
+      url: 'https://api.ebay.com/ws/api.dll',
+      headers: {
+        'Content-Type': 'text/xml',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
+        'X-EBAY-API-CALL-NAME': 'GetSellerProfiles',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-APP-NAME': config.ebay.appId,
+        'X-EBAY-API-DEV-NAME': config.ebay.devId,
+        'X-EBAY-API-CERT-NAME': config.ebay.certId
+      },
+      data: requestXml
+    });
+    
+    // Parse XML response
+    const parser = new xml2js.Parser({ explicitArray: false });
+    const result = await parser.parseStringPromise(response.data);
+    
+    if (result.GetSellerProfilesResponse.Ack === 'Success' || result.GetSellerProfilesResponse.Ack === 'Warning') {
+      const policies = {
+        shipping: '',
+        return: '',
+        payment: ''
+      };
       
-      let warnings = [];
-      if (result.AddItemResponse.Ack === 'Warning' && result.AddItemResponse.Errors) {
-        warnings = Array.isArray(result.AddItemResponse.Errors) 
-          ? result.AddItemResponse.Errors 
-          : [result.AddItemResponse.Errors];
+      // Get shipping policy
+      if (result.GetSellerProfilesResponse.SellerShippingProfileArray && 
+          result.GetSellerProfilesResponse.SellerShippingProfileArray.SellerShippingProfile) {
+        const shippingProfiles = result.GetSellerProfilesResponse.SellerShippingProfileArray.SellerShippingProfile;
+        if (Array.isArray(shippingProfiles) && shippingProfiles.length > 0) {
+          policies.shipping = shippingProfiles[0].ShippingProfileID;
+        } else if (shippingProfiles.ShippingProfileID) {
+          policies.shipping = shippingProfiles.ShippingProfileID;
+        }
       }
       
-      return res.json({ 
-        success: true, 
-        itemId, 
-        listingUrl,
-        warnings: warnings.map(w => ({ 
-          message: w.ShortMessage, 
-          details: w.LongMessage 
-        }))
-      });
-    } else {
-      const errors = Array.isArray(result.AddItemResponse.Errors) 
-        ? result.AddItemResponse.Errors 
-        : [result.AddItemResponse.Errors];
+      // Get return policy
+      if (result.GetSellerProfilesResponse.SellerReturnProfileArray && 
+          result.GetSellerProfilesResponse.SellerReturnProfileArray.SellerReturnProfile) {
+        const returnProfiles = result.GetSellerProfilesResponse.SellerReturnProfileArray.SellerReturnProfile;
+        if (Array.isArray(returnProfiles) && returnProfiles.length > 0) {
+          policies.return = returnProfiles[0].ReturnProfileID;
+        } else if (returnProfiles.ReturnProfileID) {
+          policies.return = returnProfiles.ReturnProfileID;
+        }
+      }
       
-      return res.status(400).json({ 
-        error: 'Failed to create listing',
-        details: errors.map(e => ({ 
-          message: e.ShortMessage, 
-          details: e.LongMessage 
-        }))
-      });
+      // Get payment policy
+      if (result.GetSellerProfilesResponse.SellerPaymentProfileArray && 
+          result.GetSellerProfilesResponse.SellerPaymentProfileArray.SellerPaymentProfile) {
+        const paymentProfiles = result.GetSellerProfilesResponse.SellerPaymentProfileArray.SellerPaymentProfile;
+        if (Array.isArray(paymentProfiles) && paymentProfiles.length > 0) {
+          policies.payment = paymentProfiles[0].PaymentProfileID;
+        } else if (paymentProfiles.PaymentProfileID) {
+          policies.payment = paymentProfiles.PaymentProfileID;
+        }
+      }
+      
+      return policies;
     }
+    
+    return { shipping: '', return: '', payment: '' };
   } catch (error) {
-    return res.status(500).json({ error: 'Error creating listing', details: error.message });
+    console.error('Error in getBusinessPolicies:', error.message);
+    return { shipping: '', return: '', payment: '' };
   }
-});
+}
 
 // Update listing quantity
 router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
@@ -230,47 +417,31 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
     // Convert quantity to integer
     const quantityValue = parseInt(quantity, 10);
     
-    // For zero quantity, we need to use a different approach
-    if (quantityValue === 0) {
-      // First, we need to enable out of stock control at the account level
-      // This only needs to be done once per account, but we'll do it each time to be safe
-      const enableOutOfStockXml = `<?xml version="1.0" encoding="utf-8"?>
-      <SetUserPreferencesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-        <RequesterCredentials>
-          <eBayAuthToken>${req.session.authToken}</eBayAuthToken>
-        </RequesterCredentials>
-        <OutOfStockControlPreference>true</OutOfStockControlPreference>
-      </SetUserPreferencesRequest>`;
-      
-      // Enable out of stock control at account level
-      await axios({
-        method: 'post',
-        url: 'https://api.ebay.com/ws/api.dll',
-        headers: {
-          'Content-Type': 'text/xml',
-          'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
-          'X-EBAY-API-CALL-NAME': 'SetUserPreferences',
-          'X-EBAY-API-SITEID': '0',
-        },
-        data: enableOutOfStockXml
-      });
-      
-      // Now set the quantity to a very low number (1) instead of 0
-      // This is a workaround since eBay doesn't allow setting quantity to 0 directly
-      const quantityValue = 1;
-    }
+    // Get eBay API credentials and business policies from config
+    const config = require('../config');
     
-    // Create XML request body
-    const requestXml = `<?xml version="1.0" encoding="utf-8"?>
+    // Create XML request body with business policies
+    let requestXml = `<?xml version="1.0" encoding="utf-8"?>
     <ReviseItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
       <RequesterCredentials>
         <eBayAuthToken>${req.session.authToken}</eBayAuthToken>
       </RequesterCredentials>
-      <ErrorLanguage>en_US</ErrorLanguage>
-      <WarningLevel>High</WarningLevel>
       <Item>
         <ItemID>${itemId}</ItemID>
         <Quantity>${quantityValue}</Quantity>
+        
+        <!-- Add business policies from config -->
+        <SellerProfiles>
+          <SellerShippingProfile>
+            <ShippingProfileID>${config.shippingProfileId}</ShippingProfileID>
+          </SellerShippingProfile>
+          <SellerReturnProfile>
+            <ReturnProfileID>${config.returnProfileId}</ReturnProfileID>
+          </SellerReturnProfile>
+          <SellerPaymentProfile>
+            <PaymentProfileID>${config.paymentProfileId}</PaymentProfileID>
+          </SellerPaymentProfile>
+        </SellerProfiles>
       </Item>
     </ReviseItemRequest>`;
     
@@ -283,6 +454,9 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
         'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
         'X-EBAY-API-CALL-NAME': 'ReviseItem',
         'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-APP-NAME': config.ebay.appId,
+        'X-EBAY-API-DEV-NAME': config.ebay.devId,
+        'X-EBAY-API-CERT-NAME': config.ebay.certId
       },
       data: requestXml
     });
@@ -295,9 +469,7 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
       return res.json({ 
         success: true, 
         itemId,
-        message: quantityValue === 0 ? 
-          'Out of stock control enabled for your account. Set quantity to minimum value.' : 
-          'Quantity updated successfully'
+        message: 'Quantity updated successfully'
       });
     } else {
       const errors = result.ReviseItemResponse.Errors;
@@ -315,5 +487,55 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
     });
   }
 });
+
+// Helper function to verify if a category is valid
+async function verifyCategory(categoryId, authToken) {
+  try {
+    const config = require('../config');
+    
+    // If the category ID is 9355, return true immediately as we know it's valid
+    if (categoryId === '9355') {
+      return true;
+    }
+    
+    // Create XML request body
+    const requestXml = `<?xml version="1.0" encoding="utf-8"?>
+    <GetCategorySpecificsRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+      <RequesterCredentials>
+        <eBayAuthToken>${authToken}</eBayAuthToken>
+      </RequesterCredentials>
+      <CategoryID>${categoryId}</CategoryID>
+    </GetCategorySpecificsRequest>`;
+    
+    // Make API request
+    const response = await axios({
+      method: 'post',
+      url: 'https://api.ebay.com/ws/api.dll',
+      headers: {
+        'Content-Type': 'text/xml',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
+        'X-EBAY-API-CALL-NAME': 'GetCategorySpecifics',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-APP-NAME': config.ebay.appId,
+        'X-EBAY-API-DEV-NAME': config.ebay.devId,
+        'X-EBAY-API-CERT-NAME': config.ebay.certId
+      },
+      data: requestXml
+    });
+    
+    // Parse XML response
+    const parser = new xml2js.Parser({ explicitArray: false });
+    const result = await parser.parseStringPromise(response.data);
+    
+    if (result.GetCategorySpecificsResponse.Ack === 'Success' || result.GetCategorySpecificsResponse.Ack === 'Warning') {
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error in verifyCategory:', error.message);
+    return false;
+  }
+}
 
 module.exports = router; 
