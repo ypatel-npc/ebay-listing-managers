@@ -127,9 +127,22 @@ async function processQueue() {
   isProcessing = false;
 }
 
+// Function to escape XML special characters
+function escapeXml(unsafe) {
+  if (!unsafe) return '';
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 // Function to create a listing
 async function createListing(item) {
   // Create XML request body based on the working single listing XML structure
+  console.log('Creating listing for item:', item);
+  console.log('item.title:', item.title);
   const requestXml = `<?xml version="1.0" encoding="utf-8"?>
   <AddItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
     <RequesterCredentials>
@@ -138,7 +151,7 @@ async function createListing(item) {
     <ErrorLanguage>en_US</ErrorLanguage>
     <WarningLevel>High</WarningLevel>
     <Item>
-      <Title>${item.title}</Title>
+      <Title>${escapeXml(item.title)}</Title>
       <Description><![CDATA[${item.description}]]></Description>
       <PrimaryCategory>
         <CategoryID>${item.category_id}</CategoryID>
@@ -171,65 +184,65 @@ async function createListing(item) {
         </ShippingServiceOptions>
       </ShippingDetails>
       <Site>US</Site>
-      <Location>${item.location || 'United States'}</Location>
+      <Location>${escapeXml(item.location) || 'United States'}</Location>
       <ItemSpecifics>
         <NameValueList>
           <Name>Brand</Name>
-          <Value>${item.brand || getBrandFromTitle(item.title)}</Value>
+          <Value>${escapeXml(item.brand || getBrandFromTitle(item.title))}</Value>
         </NameValueList>
         ${item.processor ? `
         <NameValueList>
           <Name>Processor</Name>
-          <Value>${item.processor}</Value>
+          <Value>${escapeXml(item.processor)}</Value>
         </NameValueList>` : ''}
         ${item.screen_size ? `
         <NameValueList>
           <Name>Screen Size</Name>
-          <Value>${item.screen_size}</Value>
+          <Value>${escapeXml(item.screen_size)}</Value>
         </NameValueList>` : ''}
         ${item.model ? `
         <NameValueList>
           <Name>Model</Name>
-          <Value>${item.model}</Value>
+          <Value>${escapeXml(item.model)}</Value>
         </NameValueList>` : ''}
         ${item.storage_capacity ? `
         <NameValueList>
           <Name>Storage Capacity</Name>
-          <Value>${item.storage_capacity}</Value>
+          <Value>${escapeXml(item.storage_capacity)}</Value>
         </NameValueList>` : getStorageFromTitle(item.title) ? `
         <NameValueList>
           <Name>Storage Capacity</Name>
-          <Value>${getStorageFromTitle(item.title)}</Value>
+          <Value>${escapeXml(getStorageFromTitle(item.title))}</Value>
         </NameValueList>` : ''}
         ${item.color ? `
         <NameValueList>
           <Name>Color</Name>
-          <Value>${item.color}</Value>
+          <Value>${escapeXml(item.color)}</Value>
         </NameValueList>` : getColorFromTitle(item.title) ? `
         <NameValueList>
           <Name>Color</Name>
-          <Value>${getColorFromTitle(item.title)}</Value>
+          <Value>${escapeXml(getColorFromTitle(item.title))}</Value>
         </NameValueList>` : ''}
         ${item.connectivity ? `
         <NameValueList>
           <Name>Connectivity</Name>
-          <Value>${item.connectivity}</Value>
+          <Value>${escapeXml(item.connectivity)}</Value>
         </NameValueList>` : `
         <NameValueList>
           <Name>Connectivity</Name>
-          <Value>${getConnectivityByCategory(item.category_id)}</Value>
+          <Value>${escapeXml(getConnectivityByCategory(item.category_id))}</Value>
         </NameValueList>`}
         ${item.type ? `
         <NameValueList>
           <Name>Type</Name>
-          <Value>${item.type}</Value>
+          <Value>${escapeXml(item.type)}</Value>
         </NameValueList>` : `
         <NameValueList>
           <Name>Type</Name>
-          <Value>${getTypeByCategory(item.category_id, item.title)}</Value>
+          <Value>${escapeXml(getTypeByCategory(item.category_id, item.title))}</Value>
         </NameValueList>`}
       </ItemSpecifics>
-      <SKU>${item.sku || ''}</SKU>
+      <SKU>${escapeXml(item.sku) || ''}</SKU>
       <SellerProfiles>
         <SellerPaymentProfile>
           <PaymentProfileID>241761903026</PaymentProfileID>
@@ -244,33 +257,51 @@ async function createListing(item) {
     </Item>
   </AddItemRequest>`;
   
-  // Make API request
-  const response = await axios({
-    method: 'post',
-    url: 'https://api.ebay.com/ws/api.dll',
-    headers: {
-      'Content-Type': 'text/xml',
-      'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
-      'X-EBAY-API-CALL-NAME': 'AddItem',
-      'X-EBAY-API-SITEID': '0',
-    },
-    data: requestXml
-  });
+  // Log the XML request
+  // const logFilePath = logXmlAndError(item, requestXml);
   
-  // Parse XML response
-  const parser = new xml2js.Parser({ explicitArray: false });
-  const result = await parser.parseStringPromise(response.data);
-  
-  if (result.AddItemResponse.Ack !== 'Success' && result.AddItemResponse.Ack !== 'Warning') {
-    const errors = result.AddItemResponse.Errors;
-    const errorMsg = Array.isArray(errors) 
-      ? errors.map(e => e.LongMessage).join(', ') 
-      : errors?.LongMessage || 'Failed to create listing';
+  try {
+    // Make API request
+    const response = await axios({
+      method: 'post',
+      url: 'https://api.ebay.com/ws/api.dll',
+      headers: {
+        'Content-Type': 'text/xml',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
+        'X-EBAY-API-CALL-NAME': 'AddItem',
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-APP-NAME': process.env.EBAY_APP_ID || 'YourAppID',
+        'X-EBAY-API-DEV-NAME': process.env.EBAY_DEV_ID || 'YourDevID',
+        'X-EBAY-API-CERT-NAME': process.env.EBAY_CERT_ID || 'YourCertID'
+      },
+      data: requestXml
+    });
     
-    throw new Error(errorMsg);
+    // Parse XML response
+    const parser = new xml2js.Parser({ explicitArray: false });
+    const result = await parser.parseStringPromise(response.data);
+    
+    // Append response to log file
+    // fs.appendFileSync(logFilePath, `XML Response:\n${response.data}\n\n`);
+    
+    if (result.AddItemResponse.Ack !== 'Success' && result.AddItemResponse.Ack !== 'Warning') {
+      const errors = result.AddItemResponse.Errors;
+      const errorMsg = Array.isArray(errors) 
+        ? errors.map(e => e.LongMessage).join(', ') 
+        : errors?.LongMessage || 'Failed to create listing';
+      
+      // Log the error
+    //   logXmlAndError(item, requestXml, new Error(errorMsg));
+      
+      throw new Error(errorMsg);
+    }
+    
+    return result.AddItemResponse.ItemID;
+  } catch (error) {
+    // Log the error
+    // logXmlAndError(item, requestXml, error);
+    throw error;
   }
-  
-  return result.AddItemResponse.ItemID;
 }
 
 // Helper function to extract brand from title
