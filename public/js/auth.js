@@ -14,19 +14,40 @@ document.addEventListener('DOMContentLoaded', function() {
 // Function to check authentication status
 async function checkAuthStatus() {
   try {
-    console.log('Checking authentication status...');
+    console.log('Checking auth status...');
     const response = await fetch('/api/auth/status');
-    const data = await response.json();
+    console.log('Auth status response:', response.status);
     
-    console.log('Auth status response:', data);
+    const data = await response.json();
+    console.log('Auth status data:', data);
     
     if (data.authenticated) {
-      console.log('User is authenticated');
-      showDashboard(data.user);
+      // Store user data globally
+      window.userData = data.user;
+      
+      // Show dashboard elements
+      if (document.getElementById('dashboard')) {
+        document.getElementById('dashboard').style.display = 'block';
+      }
+      if (document.getElementById('user-id')) {
+        document.getElementById('user-id').textContent = data.user.userId;
+      }
+      if (document.getElementById('logout-btn')) {
+        document.getElementById('logout-btn').style.display = 'block';
+      }
+      
       return true;
+    } else {
+      // User is not authenticated
+      if (document.getElementById('login-form')) {
+        document.getElementById('login-form').style.display = 'block';
+      }
+      if (document.getElementById('dashboard')) {
+        document.getElementById('dashboard').style.display = 'none';
+      }
+      
+      return false;
     }
-    console.log('User is not authenticated');
-    return false;
   } catch (error) {
     console.error('Error checking auth status:', error);
     return false;

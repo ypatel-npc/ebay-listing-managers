@@ -69,15 +69,22 @@ router.post('/token', async (req, res) => {
 
 // Route to check authentication status
 router.get('/status', (req, res) => {
-  console.log('Auth status check - Session:', req.session);
+  console.log('Auth status requested');
+  console.log('Session:', req.session);
+  console.log('Auth token present:', !!req.session.authToken);
   
-  if (req.session.authToken && req.session.userData) {
-    console.log('User is authenticated:', req.session.userData.userId);
-    return res.json({ authenticated: true, user: req.session.userData });
+  if (req.session && req.session.authToken && req.session.userData) {
+    console.log('User is authenticated, returning user data');
+    return res.json({
+      authenticated: true,
+      user: req.session.userData
+    });
+  } else {
+    console.log('User is not authenticated');
+    return res.json({
+      authenticated: false
+    });
   }
-  
-  console.log('User is not authenticated');
-  res.json({ authenticated: false });
 });
 
 // Route to logout

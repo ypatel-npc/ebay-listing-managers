@@ -8,6 +8,7 @@ const config = require('./config');
 const authRoutes = require('./routes/auth');
 const listingsRoutes = require('./routes/listings');
 const inventoryRoutes = require('./routes/inventory');
+const bulkRoutes = require('./routes/bulk');
 
 // Create Express app
 const app = express();
@@ -19,12 +20,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
   secret: config.sessionSecret,
   resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    secure: false,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  },
-  name: 'ebay-listing-manager-session' // Add a specific name
+  saveUninitialized: true,
+  cookie: { secure: false } // Set to true if using HTTPS
 }));
 
 // Add middleware to log session on each request
@@ -35,43 +32,36 @@ app.use((req, res, next) => {
   next();
 });
 
-// Use routes
+// Root route handler
+app.get('/', (req, res) => {
+  if (req.session && req.session.authToken) {
+    res.redirect('/listings.html');
+  } else {
+    res.redirect('/index.html');
+  }
+});
+
+// Register API routes BEFORE static file middleware
 app.use('/api/auth', authRoutes);
 app.use('/api/listings', listingsRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/bulk', bulkRoutes);
 
-// Default route
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// Serve static files AFTER API routes
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Add a specific route for listings.html to debug
-app.get('/listings.html', (req, res) => {
-  if (!req.session.authToken) {
-    return res.redirect('/');
-  }
-  res.sendFile(path.join(__dirname, 'public', 'listings.html'));
-});
-
-app.get('/create.html', (req, res) => {
-  console.log('Create.html requested, auth token:', !!req.session.authToken);
+// Add a catch-all route handler for HTML pages that require authentication
+app.get(['*/create.html', '*/listings.html', '*/bulk.html'], (req, res, next) => {
+  console.log('Protected page requested:', req.path);
+  console.log('Auth token present:', !!req.session.authToken);
   
   if (!req.session.authToken) {
     console.log('No auth token, redirecting to home');
     return res.redirect('/');
   }
   
-  const filePath = path.join(__dirname, 'public', 'create.html');
-  console.log('Serving file:', filePath);
-  
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      console.error('Error sending file:', err);
-      res.status(err.status || 500).end();
-    } else {
-      console.log('File sent successfully');
-    }
-  });
+  // If authenticated, continue to serve the static file
+  next();
 });
 
 // Start server
