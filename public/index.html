@@ -17,9 +17,44 @@
           </div>
           <div class="card-body">
             <div id="login-form">
-              <h3 class="mb-4">Enter your eBay Auth'n'Auth Token</h3>
+              <h3 class="mb-4">Enter your eBay Auth Token</h3>
+              
+              <!-- Environment Selection -->
               <div class="mb-3">
-                <textarea id="auth-token" class="form-control" rows="5" placeholder="Paste your eBay Auth'n'Auth token here..."></textarea>
+                <label class="form-label">Environment</label>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="environment" id="env-production" value="production" checked>
+                  <label class="form-check-label" for="env-production">
+                    Production
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="environment" id="env-sandbox" value="sandbox">
+                  <label class="form-check-label" for="env-sandbox">
+                    Sandbox
+                  </label>
+                </div>
+              </div>
+              
+              <!-- Token Type Selection -->
+              <div class="mb-3">
+                <label class="form-label">Token Type</label>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="token-type" id="type-authnauth" value="authnauth" checked>
+                  <label class="form-check-label" for="type-authnauth">
+                    Auth'n'Auth Token
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="token-type" id="type-oauth" value="oauth">
+                  <label class="form-check-label" for="type-oauth">
+                    OAuth Token
+                  </label>
+                </div>
+              </div>
+              
+              <div class="mb-3">
+                <textarea id="auth-token" class="form-control" rows="5" placeholder="Paste your eBay token here..."></textarea>
               </div>
               <div class="d-grid">
                 <button id="login-btn" class="btn btn-primary">Login</button>

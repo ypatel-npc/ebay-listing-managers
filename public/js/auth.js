@@ -25,6 +25,19 @@ async function checkAuthStatus() {
       // Store user data globally
       window.userData = data.user;
       
+      // Show environment indicator
+      if (data.environment === 'sandbox') {
+        document.body.classList.add('sandbox-mode');
+        // Add a sandbox indicator to the navbar if it exists
+        const navbar = document.querySelector('.navbar');
+        if (navbar) {
+          const indicator = document.createElement('div');
+          indicator.className = 'sandbox-indicator';
+          indicator.textContent = 'SANDBOX MODE';
+          navbar.appendChild(indicator);
+        }
+      }
+      
       // Show dashboard elements
       if (document.getElementById('dashboard')) {
         document.getElementById('dashboard').style.display = 'block';
@@ -57,9 +70,11 @@ async function checkAuthStatus() {
 // Function to login
 async function login() {
   const token = document.getElementById('auth-token').value.trim();
+  const environment = document.querySelector('input[name="environment"]:checked').value;
+  const tokenType = document.querySelector('input[name="token-type"]:checked').value;
   
   if (!token) {
-    alert('Please enter your eBay Auth\'n\'Auth token');
+    alert('Please enter your eBay token');
     return;
   }
   
@@ -69,7 +84,11 @@ async function login() {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ token })
+      body: JSON.stringify({ 
+        token,
+        environment,
+        tokenType
+      })
     });
     
     const data = await response.json();

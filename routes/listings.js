@@ -5,12 +5,21 @@ const router = express.Router();
 const { isAuthenticated } = require('./auth');
 const config = require('../config');
 
+// Update the API endpoint based on environment
+function getApiEndpoint(req) {
+  return req.session.environment === 'sandbox' 
+    ? 'https://api.sandbox.ebay.com/ws/api.dll' 
+    : 'https://api.ebay.com/ws/api.dll';
+}
+
 // Get all active listings
 router.get('/', isAuthenticated, async (req, res) => {
   try {
+    const apiEndpoint = getApiEndpoint(req);
+    
     const response = await axios({
       method: 'post',
-      url: 'https://api.ebay.com/ws/api.dll',
+      url: apiEndpoint,
       headers: {
         'Content-Type': 'text/xml',
         'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
@@ -163,9 +172,10 @@ router.post('/', isAuthenticated, async (req, res) => {
     </AddItemRequest>`;
     
     // Make API request
+    const apiEndpoint = getApiEndpoint(req);
     const response = await axios({
       method: 'post',
-      url: 'https://api.ebay.com/ws/api.dll',
+      url: apiEndpoint,
       headers: {
         'Content-Type': 'text/xml',
         'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
@@ -243,9 +253,10 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
       </SetUserPreferencesRequest>`;
       
       // Enable out of stock control at account level
+      const apiEndpoint = getApiEndpoint(req);
       await axios({
         method: 'post',
-        url: 'https://api.ebay.com/ws/api.dll',
+        url: apiEndpoint,
         headers: {
           'Content-Type': 'text/xml',
           'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
@@ -275,9 +286,10 @@ router.put('/:itemId/quantity', isAuthenticated, async (req, res) => {
     </ReviseItemRequest>`;
     
     // Make API request
+    const apiEndpoint = getApiEndpoint(req);
     const response = await axios({
       method: 'post',
-      url: 'https://api.ebay.com/ws/api.dll',
+      url: apiEndpoint,
       headers: {
         'Content-Type': 'text/xml',
         'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',

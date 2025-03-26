@@ -48,4 +48,20 @@ body {
   transform: translateX(-50%);
   z-index: 9999;
   min-width: 300px;
+}
+
+.sandbox-mode .navbar {
+  border-bottom: 4px solid #ff9800;
+}
+
+.sandbox-indicator {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  background-color: #ff9800;
+  color: white;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: bold;
+  border-radius: 0 0 4px 4px;
 } 
