@@ -46,27 +46,35 @@
             <h5>CSV File Requirements:</h5>
             <p>Your CSV file must include the following columns:</p>
             <ul>
+              <li><strong>SKU</strong> - Your unique identifier for the product</li>
+              <li><strong>Localized For</strong> - Locale information (e.g., en_US)</li>
               <li><strong>title</strong> - Product title (80 characters max)</li>
+              <li><strong>subtitle</strong> - Optional subtitle for the listing</li>
               <li><strong>description</strong> - Product description (HTML allowed)</li>
-              <li><strong>price</strong> - Product price (e.g., 19.99)</li>
-              <li><strong>quantity</strong> - Available quantity (set to 0 for out of stock)</li>
-              <li><strong>category_id</strong> - eBay category ID (e.g., 9355 for Cell Phones, 177 for Computers)</li>
-              <li><strong>location</strong> - Item location (e.g., United States, New York, etc.)</li>
-              <li><strong>brand</strong> - Brand name of the product (required by eBay)</li>
+              <li><strong>Picture URL 1</strong> - URL to product image</li>
+              <li><strong>MPN</strong> - Manufacturer Part Number</li>
+              <li><strong>Brand</strong> - Brand name of the product</li>
+              <li><strong>Condition</strong> - Item condition (e.g., New, Used)</li>
+              <li><strong>Condition Description</strong> - Details about the condition</li>
+              <li><strong>Compatible Product 1</strong> - Compatible product information</li>
+              <li><strong>Total Ship to Home Quantity</strong> - Available quantity</li>
+              <li><strong>LocationId</strong> - Location identifier</li>
+              <li><strong>Fulfillment Type</strong> - How the item will be fulfilled</li>
+              <li><strong>Quantity Available</strong> - Available quantity per channel</li>
+              <li><strong>Channel ID</strong> - Sales channel identifier</li>
+              <li><strong>Category</strong> - eBay category ID</li>
+              <li><strong>Secondary Category</strong> - Additional category ID</li>
+              <li><strong>Shipping Policy</strong> - Shipping policy name/ID</li>
+              <li><strong>Payment Policy</strong> - Payment policy name/ID</li>
+              <li><strong>Return Policy</strong> - Return policy name/ID</li>
+              <li><strong>List Price</strong> - Product price</li>
+              <li><strong>Apply Tax</strong> - Whether to apply tax (Yes/No)</li>
+              <li><strong>Warehouse Location ID</strong> - Warehouse identifier</li>
             </ul>
-            <p>Optional columns:</p>
+            <p>Attribute fields:</p>
             <ul>
-              <li><strong>sku</strong> - Your unique SKU/identifier for the product</li>
-              <li><strong>condition_id</strong> - eBay condition ID (default: 1000 - New)</li>
-              <li><strong>image_url</strong> - URL to product image</li>
-              <li><strong>shipping_cost</strong> - Shipping cost (default: 0.00)</li>
-              <li><strong>processor</strong> - Processor type (required for electronics)</li>
-              <li><strong>screen_size</strong> - Screen size (required for devices with screens)</li>
-              <li><strong>model</strong> - Model number or name</li>
-              <li><strong>storage_capacity</strong> - Storage capacity (required for electronics, e.g., 128GB)</li>
-              <li><strong>color</strong> - Color of the item (required for most categories)</li>
-              <li><strong>connectivity</strong> - Connectivity type (e.g., Wireless, Bluetooth, Wi-Fi)</li>
-              <li><strong>type</strong> - Product type (e.g., Smartphone, Laptop, Earbuds, Over-Ear)</li>
+              <li><strong>Attribute Name 1-9</strong> - Names of item specific attributes</li>
+              <li><strong>Attribute Value 1-9</strong> - Values for the corresponding attributes</li>
             </ul>
             <p><a href="/sample-bulk-upload.csv" download>Download Sample CSV</a></p>
           </div>

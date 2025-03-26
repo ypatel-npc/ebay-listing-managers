@@ -46,128 +46,174 @@ router.post('/upload', isAuthenticated, upload.single('csvFile'), (req, res) => 
         return res.status(400).json({ error: 'CSV file is empty' });
       }
       
+      // Check if this is the automotive format
+      const format = req.body.format || '';
+      
+      // Define required fields based on format
+      let requiredFields;
+      if (format === 'automotive') {
+        requiredFields = [
+          'SKU', 'Localized For', 'title', 'description', 
+          'Picture URL 1', 'Brand', 'Condition', 
+          'Total Ship to Home Quantity', 'Category'
+        ];
+      } else {
+        // Default required fields
+        requiredFields = ['title', 'description', 'price', 'quantity', 'category_id'];
+      }
+      
       // Check required fields
-      const requiredFields = ['title', 'description', 'price', 'quantity', 'category_id'];
       const firstRow = results[0];
       const missingFields = requiredFields.filter(field => !firstRow.hasOwnProperty(field));
       
       if (missingFields.length > 0) {
-        return res.status(400).json({ 
-          error: 'CSV is missing required fields', 
-          missingFields 
-        });
+        return res.status(400).json({ error: 'CSV is missing required fields', missingFields });
       }
       
       // Add items to the queue
       results.forEach(item => {
         listingQueue.push({
-          ...item,
+          item,
           status: 'pending',
-          userId: req.session.userData.userId,
-          authToken: req.session.authToken
+          format: format
         });
       });
       
       // Start processing if not already running
       if (!isProcessing) {
-        processQueue();
+        processQueue(req.session.authToken);
       }
       
       return res.json({ 
         success: true, 
         message: `${results.length} items added to the queue for processing`,
-        queueSize: listingQueue.length
+        queueId: Date.now().toString()
       });
     });
 });
 
-// Route to get queue status
+// Route to check processing status
 router.get('/status', isAuthenticated, (req, res) => {
-  const pendingCount = listingQueue.filter(item => item.status === 'pending').length;
-  const successCount = listingQueue.filter(item => item.status === 'success').length;
-  const failedCount = listingQueue.filter(item => item.status === 'failed').length;
+  const totalItems = listingQueue.length;
+  const pendingItems = listingQueue.filter(item => item.status === 'pending').length;
+  const successItems = listingQueue.filter(item => item.status === 'success').length;
+  const failedItems = listingQueue.filter(item => item.status === 'failed').length;
+  
+  // Get error details for failed items
+  const errors = listingQueue
+    .filter(item => item.status === 'failed')
+    .map(item => ({
+      title: item.item.title || 'Unknown Item',
+      sku: item.item.SKU || item.item.sku || 'No SKU',
+      error: item.error || 'Unknown error'
+    }));
   
   return res.json({
-    isProcessing,
-    pendingCount,
-    successCount,
-    failedCount,
-    totalCount: listingQueue.length
+    success: true,
+    status: {
+      total: totalItems,
+      pending: pendingItems,
+      success: successItems,
+      failed: failedItems,
+      isProcessing,
+      progress: totalItems > 0 ? Math.round(((successItems + failedItems) / totalItems) * 100) : 0
+    },
+    errors
   });
 });
 
 // Function to process the queue
-async function processQueue() {
-  if (listingQueue.length === 0 || isProcessing) {
+async function processQueue(authToken) {
+  if (isProcessing || listingQueue.length === 0) {
     return;
   }
   
   isProcessing = true;
   
-  // Process items one by one
-  while (listingQueue.length > 0) {
-    const item = listingQueue.find(item => item.status === 'pending');
-    if (!item) {
-      break;
+  try {
+    // Process items one by one
+    for (const queueItem of listingQueue) {
+      if (queueItem.status === 'pending') {
+        try {
+          // Process the item
+          await createListing(queueItem.item, authToken, queueItem.format);
+          queueItem.status = 'success';
+        } catch (error) {
+          queueItem.status = 'failed';
+          queueItem.error = error.message || 'Error creating listing';
+          console.error('Error processing item:', error);
+        }
+      }
     }
-    
-    try {
-      await createListing(item);
-      item.status = 'success';
-    } catch (error) {
-      console.error('Error creating listing:', error);
-      item.status = 'failed';
-      item.error = error.message;
-    }
-    
-    // Add a small delay to avoid overwhelming the API
-    await new Promise(resolve => setTimeout(resolve, 200));
+  } catch (error) {
+    console.error('Error processing queue:', error);
+  } finally {
+    isProcessing = false;
+  }
+}
+
+// Function to create a listing from CSV data
+async function createListing(item, authToken, format) {
+  // Map CSV fields to eBay API fields based on format
+  let title, description, price, quantity, categoryId, condition, imageUrl, sku, brand, type;
+  
+  if (format === 'automotive') {
+    // Map automotive format fields
+    title = item.title || '';
+    description = item.description || '';
+    price = item['List Price'] || '0.00';
+    quantity = item['Total Ship to Home Quantity'] || '0';
+    categoryId = item.Category || '';
+    condition = mapConditionToId(item.Condition || '');
+    imageUrl = item['Picture URL 1'] || '';
+    sku = item.SKU || '';
+    brand = item.Brand || '';
+    type = item.Type || item['Attribute Value 1'] || '';
+  } else {
+    // Map standard format fields
+    title = item.title || '';
+    description = item.description || '';
+    price = item.price || '0.00';
+    quantity = item.quantity || '0';
+    categoryId = item.category_id || '';
+    condition = item.condition_id || '1000';
+    imageUrl = item.image_url || '';
+    sku = item.sku || '';
+    brand = item.brand || '';
+    type = item.type || '';
   }
   
-  isProcessing = false;
-}
-
-// Function to escape XML special characters
-function escapeXml(unsafe) {
-  if (!unsafe) return '';
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-// Function to create a listing
-async function createListing(item) {
-  // Create XML request body based on the working single listing XML structure
-  console.log('Creating listing for item:', item);
-  console.log('item.title:', item.title);
+  // Validate required fields
+  if (!title || !description || !categoryId) {
+    throw new Error('Missing required fields: title, description, or category');
+  }
+  
+  // Create XML request body
   const requestXml = `<?xml version="1.0" encoding="utf-8"?>
   <AddItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
     <RequesterCredentials>
-      <eBayAuthToken>${item.authToken}</eBayAuthToken>
+      <eBayAuthToken>${authToken}</eBayAuthToken>
     </RequesterCredentials>
     <ErrorLanguage>en_US</ErrorLanguage>
     <WarningLevel>High</WarningLevel>
     <Item>
-      <Title>${escapeXml(item.title)}</Title>
-      <Description><![CDATA[${item.description}]]></Description>
+      <Title>${escapeXml(title)}</Title>
+      <Description>${escapeXml(description)}</Description>
       <PrimaryCategory>
-        <CategoryID>${item.category_id}</CategoryID>
+        <CategoryID>${categoryId}</CategoryID>
       </PrimaryCategory>
-      <StartPrice>${item.price}</StartPrice>
+      <StartPrice>${price}</StartPrice>
       <CategoryMappingAllowed>true</CategoryMappingAllowed>
-      <ConditionID>${item.condition_id || '1000'}</ConditionID>
+      <ConditionID>${condition}</ConditionID>
       <Country>US</Country>
       <Currency>USD</Currency>
       <DispatchTimeMax>3</DispatchTimeMax>
       <ListingDuration>GTC</ListingDuration>
       <ListingType>FixedPriceItem</ListingType>
       <PictureDetails>
-        <PictureURL>${item.image_url || 'https://i.imgur.com/rvQ3LpG.jpg'}</PictureURL>
+        <PictureURL>${imageUrl}</PictureURL>
       </PictureDetails>
-      <Quantity>${item.quantity}</Quantity>
+      <Quantity>${quantity}</Quantity>
       <ReturnPolicy>
         <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
         <RefundOption>MoneyBack</RefundOption>
@@ -179,161 +225,80 @@ async function createListing(item) {
         <ShippingServiceOptions>
           <ShippingServicePriority>1</ShippingServicePriority>
           <ShippingService>USPSPriority</ShippingService>
-          <ShippingServiceCost>${item.shipping_cost || '0.00'}</ShippingServiceCost>
-          <ShippingServiceAdditionalCost>${item.shipping_cost || '0.00'}</ShippingServiceAdditionalCost>
+          <ShippingServiceCost>${parseFloat(item.shipping_cost || '9.99')}</ShippingServiceCost>
         </ShippingServiceOptions>
       </ShippingDetails>
-      <Site>US</Site>
-      <Location>${escapeXml(item.location) || 'United States'}</Location>
+      <SKU>${escapeXml(sku)}</SKU>
       <ItemSpecifics>
         <NameValueList>
           <Name>Brand</Name>
-          <Value>${escapeXml(item.brand || getBrandFromTitle(item.title))}</Value>
+          <Value>${escapeXml(brand)}</Value>
         </NameValueList>
-        ${item.processor ? `
-        <NameValueList>
-          <Name>Processor</Name>
-          <Value>${escapeXml(item.processor)}</Value>
-        </NameValueList>` : ''}
-        ${item.screen_size ? `
-        <NameValueList>
-          <Name>Screen Size</Name>
-          <Value>${escapeXml(item.screen_size)}</Value>
-        </NameValueList>` : ''}
-        ${item.model ? `
-        <NameValueList>
-          <Name>Model</Name>
-          <Value>${escapeXml(item.model)}</Value>
-        </NameValueList>` : ''}
-        ${item.storage_capacity ? `
-        <NameValueList>
-          <Name>Storage Capacity</Name>
-          <Value>${escapeXml(item.storage_capacity)}</Value>
-        </NameValueList>` : getStorageFromTitle(item.title) ? `
-        <NameValueList>
-          <Name>Storage Capacity</Name>
-          <Value>${escapeXml(getStorageFromTitle(item.title))}</Value>
-        </NameValueList>` : ''}
-        ${item.color ? `
-        <NameValueList>
-          <Name>Color</Name>
-          <Value>${escapeXml(item.color)}</Value>
-        </NameValueList>` : getColorFromTitle(item.title) ? `
-        <NameValueList>
-          <Name>Color</Name>
-          <Value>${escapeXml(getColorFromTitle(item.title))}</Value>
-        </NameValueList>` : ''}
-        ${item.connectivity ? `
-        <NameValueList>
-          <Name>Connectivity</Name>
-          <Value>${escapeXml(item.connectivity)}</Value>
-        </NameValueList>` : `
-        <NameValueList>
-          <Name>Connectivity</Name>
-          <Value>${escapeXml(getConnectivityByCategory(item.category_id))}</Value>
-        </NameValueList>`}
-        ${item.type ? `
         <NameValueList>
           <Name>Type</Name>
-          <Value>${escapeXml(item.type)}</Value>
-        </NameValueList>` : `
-        <NameValueList>
-          <Name>Type</Name>
-          <Value>${escapeXml(getTypeByCategory(item.category_id, item.title))}</Value>
-        </NameValueList>`}
+          <Value>${escapeXml(type)}</Value>
+        </NameValueList>
       </ItemSpecifics>
-      <SKU>${escapeXml(item.sku) || ''}</SKU>
-      <SellerProfiles>
-        <SellerPaymentProfile>
-          <PaymentProfileID>241761903026</PaymentProfileID>
-        </SellerPaymentProfile>
-        <SellerReturnProfile>
-          <ReturnProfileID>241759779026</ReturnProfileID>
-        </SellerReturnProfile>
-        <SellerShippingProfile>
-          <ShippingProfileID>241759783026</ShippingProfileID>
-        </SellerShippingProfile>
-      </SellerProfiles>
     </Item>
   </AddItemRequest>`;
   
-  // Log the XML request
-  // const logFilePath = logXmlAndError(item, requestXml);
+  // Make API request
+  const response = await axios({
+    method: 'post',
+    url: 'https://api.ebay.com/ws/api.dll',
+    headers: {
+      'Content-Type': 'text/xml',
+      'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
+      'X-EBAY-API-CALL-NAME': 'AddItem',
+      'X-EBAY-API-SITEID': '0',
+    },
+    data: requestXml
+  });
   
-  try {
-    // Make API request
-    const response = await axios({
-      method: 'post',
-      url: 'https://api.ebay.com/ws/api.dll',
-      headers: {
-        'Content-Type': 'text/xml',
-        'X-EBAY-API-COMPATIBILITY-LEVEL': '1113',
-        'X-EBAY-API-CALL-NAME': 'AddItem',
-        'X-EBAY-API-SITEID': '0',
-        'X-EBAY-API-APP-NAME': process.env.EBAY_APP_ID || 'YourAppID',
-        'X-EBAY-API-DEV-NAME': process.env.EBAY_DEV_ID || 'YourDevID',
-        'X-EBAY-API-CERT-NAME': process.env.EBAY_CERT_ID || 'YourCertID'
-      },
-      data: requestXml
-    });
+  // Parse XML response
+  const parser = new xml2js.Parser({ explicitArray: false });
+  const result = await parser.parseStringPromise(response.data);
+  
+  if (result.AddItemResponse.Ack === 'Success' || result.AddItemResponse.Ack === 'Warning') {
+    return {
+      success: true,
+      itemId: result.AddItemResponse.ItemID,
+      fees: result.AddItemResponse.Fees
+    };
+  } else {
+    const errors = result.AddItemResponse.Errors;
+    const errorMsg = Array.isArray(errors) 
+      ? errors.map(e => e.LongMessage).join(', ') 
+      : errors?.LongMessage || 'Failed to create listing';
     
-    // Parse XML response
-    const parser = new xml2js.Parser({ explicitArray: false });
-    const result = await parser.parseStringPromise(response.data);
-    
-    // Append response to log file
-    // fs.appendFileSync(logFilePath, `XML Response:\n${response.data}\n\n`);
-    
-    if (result.AddItemResponse.Ack !== 'Success' && result.AddItemResponse.Ack !== 'Warning') {
-      const errors = result.AddItemResponse.Errors;
-      const errorMsg = Array.isArray(errors) 
-        ? errors.map(e => e.LongMessage).join(', ') 
-        : errors?.LongMessage || 'Failed to create listing';
-      
-      // Log the error
-    //   logXmlAndError(item, requestXml, new Error(errorMsg));
-      
-      throw new Error(errorMsg);
-    }
-    
-    return result.AddItemResponse.ItemID;
-  } catch (error) {
-    // Log the error
-    // logXmlAndError(item, requestXml, error);
-    throw error;
+    throw new Error(errorMsg);
   }
 }
 
-// Helper function to extract brand from title
-function getBrandFromTitle(title) {
-  const commonBrands = ['Apple', 'Samsung', 'Sony', 'Dell', 'HP', 'Lenovo', 'LG', 'Microsoft', 'Asus', 'Acer'];
-  for (const brand of commonBrands) {
-    if (title.includes(brand)) {
-      return brand;
-    }
-  }
-  return 'Unbranded';
+// Helper function to escape XML special characters
+function escapeXml(unsafe) {
+  if (!unsafe) return '';
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
-// Helper function to extract storage capacity from title
-function getStorageFromTitle(title) {
-  const storageRegex = /(\d+)\s*(GB|TB)/i;
-  const match = title.match(storageRegex);
-  if (match) {
-    return `${match[1]} ${match[2].toUpperCase()}`;
-  }
-  return null;
-}
-
-// Helper function to extract color from title
-function getColorFromTitle(title) {
-  const commonColors = ['Black', 'White', 'Silver', 'Gold', 'Gray', 'Graphite', 'Blue', 'Red', 'Green', 'Yellow', 'Purple', 'Pink'];
-  for (const color of commonColors) {
-    if (title.includes(color)) {
-      return color;
-    }
-  }
-  return 'Not Specified';
+// Helper function to map condition text to eBay condition ID
+function mapConditionToId(condition) {
+  const conditionMap = {
+    'New': '1000',
+    'NEW': '1000',
+    'REMANUFACTURED': '2000',
+    'Remanufactured': '2000',
+    'Used': '3000',
+    'USED': '3000',
+    'For parts or not working': '7000'
+  };
+  
+  return conditionMap[condition] || '1000';
 }
 
 // Helper function to determine connectivity based on category
