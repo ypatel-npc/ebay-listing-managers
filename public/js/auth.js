@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (document.getElementById('logout-btn')) {
     document.getElementById('logout-btn').addEventListener('click', logout);
   }
+  
+  // Load stored tokens
+  loadStoredTokens();
 });
 
 // Function to check authentication status
@@ -100,4 +103,66 @@ function showDashboard(user) {
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('user-id').textContent = user.userId;
+}
+
+// Function to load stored tokens
+async function loadStoredTokens() {
+  try {
+    const response = await fetch('/api/auth/stored-tokens');
+    const data = await response.json();
+    
+    const tokensList = document.getElementById('stored-tokens-list');
+    
+    if (data.tokens && data.tokens.length > 0) {
+      tokensList.innerHTML = '';
+      
+      data.tokens.forEach(token => {
+        const tokenItem = document.createElement('button');
+        tokenItem.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        tokenItem.innerHTML = `
+          <div>
+            <strong>${token.userId}</strong> 
+            <span class="badge bg-${token.environment === 'production' ? 'primary' : 'warning'} ms-2">
+              ${token.environment}
+            </span>
+            <span class="badge bg-secondary ms-2">${token.type}</span>
+          </div>
+          <span>Use</span>
+        `;
+        
+        tokenItem.addEventListener('click', () => useStoredToken(token.environment));
+        tokensList.appendChild(tokenItem);
+      });
+    } else {
+      tokensList.innerHTML = '<div class="list-group-item text-center">No stored tokens found</div>';
+    }
+  } catch (error) {
+    console.error('Error loading stored tokens:', error);
+    document.getElementById('stored-tokens-list').innerHTML = 
+      '<div class="list-group-item text-danger">Error loading stored tokens</div>';
+  }
+}
+
+// Function to use a stored token
+async function useStoredToken(environment) {
+  try {
+    const response = await fetch('/api/auth/use-stored-token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ environment })
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showDashboard(data.user);
+    } else {
+      alert(`Login failed: ${data.error}`);
+    }
+  } catch (error) {
+    console.error('Error using stored token:', error);
+    alert('An error occurred while logging in. Please try again.');
+  }
 } 
